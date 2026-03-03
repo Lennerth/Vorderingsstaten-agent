@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Vorderingsstaat Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; line-height: 1.6; }
+        .container { display: flex; gap: 20px; }
+        .upload-section { flex: 1; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .preview-section { flex: 2; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 10px; font-weight: bold; color: #666; }
+        #markdown-content { white-space: pre-wrap; }
+        img.preview { max-width: 100%; max-height: 200px; object-fit: contain; margin-top: 10px; display: none; }
+        .tabs { margin-bottom: 10px; border-bottom: 1px solid #ddd; }
+        .tab { padding: 10px 20px; cursor: pointer; display: inline-block; border: 1px solid transparent; border-bottom: none; }
+        .tab.active { background: #fff; border-color: #ddd; border-bottom-color: #fff; font-weight: bold; margin-bottom: -1px; }
+        pre { background: #eee; padding: 10px; overflow-x: auto; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<h1>Vorderingsstaat Generator</h1>
+
+<div class="container">
+    <div class="upload-section">
+        <h3>Upload Foto's</h3>
+        <form id="uploadForm">
+            <label><strong>Foto Voor (Eerder):</strong></label><br>
+            <input type="file" id="beforeFile" accept="image/*" required onchange="previewImage(this, 'beforePreview')"><br>
+            <img id="beforePreview" class="preview"><br><br>
+
+            <label><strong>Foto Na (Later):</strong></label><br>
+            <input type="file" id="afterFile" accept="image/*" required onchange="previewImage(this, 'afterPreview')"><br>
+            <img id="afterPreview" class="preview"><br><br>
+
+            <button type="submit" id="submitBtn">Genereer Rapport</button>
+        </form>
+        <div id="status"></div>
+    </div>
+
+    <div class="preview-section">
+        <div class="tabs">
+            <span class="tab active" onclick="switchTab('report')">Rapport (Markdown)</span>
+            <span class="tab" onclick="switchTab('json')">JSON Data</span>
+        </div>
+        
+        <div id="report-view">
+            <div id="markdown-render"><em>Het resultaat verschijnt hier...</em></div>
+        </div>
+        
+        <div id="json-view" style="display:none;">
+            <pre id="json-content">{}</pre>
+        </div>
+    </div>
+</div>
+
+<script>
+    function previewImage(input, imgId) {
+        const file = input.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const img = document.getElementById(imgId);
+                img.src = e.target.result;
+                img.style.display = 'block';
+            }
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelector(`.tab[onclick="switchTab('${tabName}')"]`).classList.add('active');
+        
+        if (tabName === 'report') {
+            document.getElementById('report-view').style.display = 'block';
+            document.getElementById('json-view').style.display = 'none';
+        } else {
+            document.getElementById('report-view').style.display = 'none';
+            document.getElementById('json-view').style.display = 'block';
+        }
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const beforeFile = document.getElementById('beforeFile').files[0];
+        const afterFile = document.getElementById('afterFile').files[0];
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        
+        if (!beforeFile || !afterFile) {
+            alert("Upload beide foto's!");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('before', beforeFile);
+        formData.append('after', afterFile);
+
+        submitBtn.disabled = true;
+        statusDiv.textContent = "Bezig met verwerken... (dit kan 30-60 sec duren)";
+        document.getElementById('markdown-render').innerHTML = '<div class="spinner">Laden...</div>';
+
+        try {
+            const response = await fetch('/progress-report', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || 'Server error');
+            }
+
+            const data = await response.json();
+            
+            // Render markdown
+            document.getElementById('markdown-render').innerHTML = marked.parse(data.markdown_report);
+            
+            // Show JSON
+            document.getElementById('json-content').textContent = JSON.stringify(data, null, 2);
+            
+            statusDiv.textContent = "Klaar!";
+        } catch (error) {
+            console.error(error);
+            statusDiv.textContent = "Fout: " + error.message;
+            document.getElementById('markdown-render').innerHTML = '<span style="color:red">Er is een fout opgetreden.</span>';
+        } finally {
+            submitBtn.disabled = false;
+        }
+    });
+</script>
+
+</body>
+</html>

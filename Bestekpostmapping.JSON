@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/schemas/agent1.bestekpostmapper.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["transitions"],
+  "properties": {
+    "transitions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from_photo", "to_photo", "bestekpostnummers", "zekerheid"],
+        "properties": {
+          "from_photo": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Index van de vroegere foto (1-based)."
+          },
+          "to_photo": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Index van de latere foto (1-based)."
+          },
+          "observaties": {
+            "type": "array",
+            "maxItems": 6,
+            "items": { "type": "string", "minLength": 2, "maxLength": 120 },
+            "description": "Korte, visuele veranderingen (bv. 'nieuwe kepers zichtbaar', 'isolatie geplaatst')."
+          },
+          "bestekpostnummers": {
+            "type": "array",
+            "minItems": 0,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^\\d{2}(?:\\.\\d{2}){0,4}$",
+              "description": "Voorbeelden: '30', '30.14', '30.12.10', '01.23'. Geen trailing punt."
+            },
+            "description": "Uniek en oplopend gesorteerd."
+          },
+          "zekerheid": {
+            "type": "string",
+            "enum": ["hoog", "middel", "laag"]
+          },
+          "toelichting": {
+            "type": "string",
+            "maxLength": 300,
+            "description": "1 korte zin waarom deze nummers gekozen werden (geen lange uitleg)."
+          }
+        }
+      }
+    },
+    "globale_opmerkingen": {
+      "type": "string",
+      "maxLength": 800
+    }
+  }
+}

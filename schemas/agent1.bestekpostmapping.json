@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["transitions", "globale_opmerkingen"],
+  "properties": {
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from_photo",
+          "to_photo",
+          "observaties",
+          "bestekpostnummers",
+          "zekerheid",
+          "toelichting"
+        ],
+        "properties": {
+          "from_photo": {
+            "type": "integer",
+            "description": "Index van de vroegere foto (1-based)."
+          },
+          "to_photo": {
+            "type": "integer",
+            "description": "Index van de latere foto (1-based)."
+          },
+          "observaties": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Korte visuele veranderingen (max 6)."
+          },
+          "bestekpostnummers": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Bestekpostnummers zoals '30', '30.14'. Uniek, oplopend."
+          },
+          "zekerheid": {
+            "type": "string",
+            "enum": ["hoog", "middel", "laag"]
+          },
+          "toelichting": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "description": "1 korte zin waarom deze nummers gekozen werden."
+          }
+        }
+      }
+    },
+    "globale_opmerkingen": {
+      "anyOf": [{ "type": "string" }, { "type": "null" }],
+      "description": "Eventuele globale opmerkingen."
+    }
+  }
+}

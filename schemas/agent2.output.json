@@ -1,0 +1,87 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["transitions", "aandachtspunten_globaal", "extra_input_nodig"],
+  "properties": {
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from_photo",
+          "to_photo",
+          "zekerheid",
+          "samenvatting",
+          "bestekposten"
+        ],
+        "properties": {
+          "from_photo": { "type": "integer" },
+          "to_photo": { "type": "integer" },
+          "zekerheid": {
+            "type": "string",
+            "enum": ["hoog", "middel", "laag"]
+          },
+          "samenvatting": {
+            "type": "string",
+            "description": "1-2 zinnen over wat er veranderd is."
+          },
+          "bestekposten": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "nummer",
+                "titel",
+                "zichtbaar_uitgevoerd",
+                "bestekeisen",
+                "bron",
+                "open_punten",
+                "volgende_stap"
+              ],
+              "properties": {
+                "nummer": { "type": "string" },
+                "titel": { "type": "string" },
+                "zichtbaar_uitgevoerd": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "bestekeisen": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "bron": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["deel", "sectie", "fragmenten"],
+                  "properties": {
+                    "deel": { "type": "string" },
+                    "sectie": { "type": "string" },
+                    "fragmenten": {
+                      "type": "array",
+                      "items": { "type": "string" }
+                    }
+                  }
+                },
+                "open_punten": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "volgende_stap": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "aandachtspunten_globaal": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "extra_input_nodig": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
