@@ -11,6 +11,8 @@
         .preview-section { flex: 2; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: #f9f9f9; }
         button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 16px; margin-top: 10px; }
         button:disabled { background: #ccc; cursor: not-allowed; }
+        button.secondary { background: #6c757d; }
+        button.danger { background: #dc3545; padding: 5px 10px; font-size: 14px; margin-top: 0; }
         #status { margin-top: 10px; font-weight: bold; color: #666; }
         #markdown-content { white-space: pre-wrap; }
         img.preview { max-width: 100%; max-height: 200px; object-fit: contain; margin-top: 10px; display: none; }
@@ -18,6 +20,10 @@
         .tab { padding: 10px 20px; cursor: pointer; display: inline-block; border: 1px solid transparent; border-bottom: none; }
         .tab.active { background: #fff; border-color: #ddd; border-bottom-color: #fff; font-weight: bold; margin-bottom: -1px; }
         pre { background: #eee; padding: 10px; overflow-x: auto; border-radius: 4px; }
+        .camera-block { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 4px; background: #fafafa; }
+        .camera-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .camera-label-input { font-size: 16px; padding: 5px; width: 60%; }
+        .spinner { font-style: italic; color: #666; }
     </style>
 </head>
 <body>
@@ -28,15 +34,10 @@
     <div class="upload-section">
         <h3>Upload Foto's</h3>
         <form id="uploadForm">
-            <label><strong>Foto Voor (Eerder):</strong></label><br>
-            <input type="file" id="beforeFile" accept="image/*" required onchange="previewImage(this, 'beforePreview')"><br>
-            <img id="beforePreview" class="preview"><br><br>
-
-            <label><strong>Foto Na (Later):</strong></label><br>
-            <input type="file" id="afterFile" accept="image/*" required onchange="previewImage(this, 'afterPreview')"><br>
-            <img id="afterPreview" class="preview"><br><br>
-
-            <button type="submit" id="submitBtn">Genereer Rapport</button>
+            <div id="camera-blocks"></div>
+            <button type="button" id="addCameraBtn" class="secondary">+ Camera toevoegen</button>
+            <br><br>
+            <button type="submit" id="submitBtn" style="width: 100%; font-size: 18px; padding: 15px;">Genereer Rapport</button>
         </form>
         <div id="status"></div>
     </div>
@@ -57,18 +58,89 @@
     </div>
 </div>
 
+<template id="camera-block-template">
+    <div class="camera-block">
+        <div class="camera-header">
+            <input type="text" class="camera-label-input" placeholder="Label (bijv. Camera 1)" required>
+            <button type="button" class="danger remove-camera-btn">Verwijder</button>
+        </div>
+        <label><strong>Foto Voor (Eerder):</strong></label><br>
+        <input type="file" class="before-file" accept="image/*" required><br>
+        <img class="preview before-preview"><br><br>
+
+        <label><strong>Foto Na (Later):</strong></label><br>
+        <input type="file" class="after-file" accept="image/*" required><br>
+        <img class="preview after-preview">
+    </div>
+</template>
+
 <script>
-    function previewImage(input, imgId) {
-        const file = input.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const img = document.getElementById(imgId);
-                img.src = e.target.result;
-                img.style.display = 'block';
+    const MAX_PAIRS = 6;
+    let cameraCount = 0;
+
+    function setupPreview(inputElement, imgElement) {
+        inputElement.addEventListener('change', () => {
+            const file = inputElement.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imgElement.src = e.target.result;
+                    imgElement.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            } else {
+                imgElement.style.display = 'none';
+                imgElement.src = '';
             }
-            reader.readAsDataURL(file);
+        });
+    }
+
+    function addCameraBlock() {
+        const blocksContainer = document.getElementById('camera-blocks');
+        const currentBlocks = blocksContainer.querySelectorAll('.camera-block').length;
+        
+        if (currentBlocks >= MAX_PAIRS) {
+            alert(`Maximaal ${MAX_PAIRS} camera's toegestaan.`);
+            return;
         }
+
+        cameraCount++;
+        const template = document.getElementById('camera-block-template');
+        const clone = template.content.cloneNode(true);
+        const block = clone.querySelector('.camera-block');
+        
+        const labelInput = block.querySelector('.camera-label-input');
+        labelInput.value = `Camera ${cameraCount}`;
+
+        setupPreview(block.querySelector('.before-file'), block.querySelector('.before-preview'));
+        setupPreview(block.querySelector('.after-file'), block.querySelector('.after-preview'));
+
+        const removeBtn = block.querySelector('.remove-camera-btn');
+        removeBtn.addEventListener('click', () => {
+            if (blocksContainer.querySelectorAll('.camera-block').length > 1) {
+                block.remove();
+                updateRemoveButtons();
+                updateAddButton();
+            }
+        });
+
+        blocksContainer.appendChild(block);
+        updateRemoveButtons();
+        updateAddButton();
+    }
+
+    function updateRemoveButtons() {
+        const blocks = document.querySelectorAll('.camera-block');
+        blocks.forEach(block => {
+            const removeBtn = block.querySelector('.remove-camera-btn');
+            removeBtn.disabled = blocks.length <= 1;
+        });
+    }
+
+    function updateAddButton() {
+        const blocks = document.querySelectorAll('.camera-block');
+        const addBtn = document.getElementById('addCameraBtn');
+        addBtn.disabled = blocks.length >= MAX_PAIRS;
     }
 
     function switchTab(tabName) {
@@ -84,25 +156,54 @@
         }
     }
 
+    // Initialize first block
+    addCameraBlock();
+
+    document.getElementById('addCameraBtn').addEventListener('click', addCameraBlock);
+
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const beforeFile = document.getElementById('beforeFile').files[0];
-        const afterFile = document.getElementById('afterFile').files[0];
-        const submitBtn = document.getElementById('submitBtn');
-        const statusDiv = document.getElementById('status');
+        const blocks = document.querySelectorAll('.camera-block');
+        if (blocks.length === 0) return;
         
-        if (!beforeFile || !afterFile) {
-            alert("Upload beide foto's!");
+        if (blocks.length > MAX_PAIRS) {
+            alert(`Maximaal ${MAX_PAIRS} camera's toegestaan.`);
             return;
         }
 
         const formData = new FormData();
-        formData.append('before', beforeFile);
-        formData.append('after', afterFile);
+        const cameraLabels = [];
+        
+        for (let i = 0; i < blocks.length; i++) {
+            const block = blocks[i];
+            const beforeFile = block.querySelector('.before-file').files[0];
+            const afterFile = block.querySelector('.after-file').files[0];
+            const label = block.querySelector('.camera-label-input').value.trim() || `Camera ${i + 1}`;
+            
+            if (!beforeFile || !afterFile) {
+                alert(`Upload beide foto's voor ${label}!`);
+                return;
+            }
+            
+            formData.append('before_images', beforeFile);
+            formData.append('after_images', afterFile);
+            cameraLabels.push(label);
+        }
+
+        formData.append('camera_labels', JSON.stringify(cameraLabels));
+
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        const addBtn = document.getElementById('addCameraBtn');
 
         submitBtn.disabled = true;
-        statusDiv.textContent = "Bezig met verwerken... (dit kan 30-60 sec duren)";
+        addBtn.disabled = true;
+        
+        // Disable remove buttons during upload
+        document.querySelectorAll('.remove-camera-btn').forEach(btn => btn.disabled = true);
+        
+        statusDiv.textContent = `Bezig met verwerken... (dit kan ${blocks.length * 30}-${blocks.length * 60} sec duren)`;
         document.getElementById('markdown-render').innerHTML = '<div class="spinner">Laden...</div>';
 
         try {
@@ -131,6 +232,8 @@
             document.getElementById('markdown-render').innerHTML = '<span style="color:red">Er is een fout opgetreden.</span>';
         } finally {
             submitBtn.disabled = false;
+            updateAddButton();
+            updateRemoveButtons();
         }
     });
 </script>

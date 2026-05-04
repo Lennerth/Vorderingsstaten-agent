@@ -9,17 +9,17 @@ from pydantic import BaseModel, Field
 # Agent 1 output (mirrors Bestekpostmapping schema)
 # ---------------------------------------------------------------------------
 
-class Transition(BaseModel):
-    from_photo: int = Field(ge=1)
-    to_photo: int = Field(ge=1)
-    observaties: list[str] = Field(default_factory=list)
-    bestekpostnummers: list[str] = Field(default_factory=list)
+class Agent1Bestekpost(BaseModel):
+    nummer: str
+    image_indices: list[int] = Field(default_factory=list)
+    camera_labels: list[str] = Field(default_factory=list)
+    observaties: list[str] = Field(default_factory=list, description="Alleen nieuw of gewijzigd werk, geen bestaande toestand.")
     zekerheid: str = Field(pattern=r"^(hoog|middel|laag)$")
     toelichting: str | None = None
 
 
 class Agent1Output(BaseModel):
-    transitions: list[Transition] = Field(min_length=1)
+    bestekposten: list[Agent1Bestekpost] = Field(default_factory=list)
     globale_opmerkingen: str | None = None
 
 
@@ -36,40 +36,17 @@ class BronInfo(BaseModel):
 class BestekpostDetail(BaseModel):
     nummer: str
     titel: str
-    zichtbaar_uitgevoerd: list[str]
+    image_indices: list[int] = Field(default_factory=list)
+    camera_labels: list[str] = Field(default_factory=list)
+    zekerheid: str = Field(pattern=r"^(hoog|middel|laag)$")
+    zichtbaar_uitgevoerd: list[str] = Field(description="Werk uitgevoerd in deze periode (delta), geen statische site-condities.")
     bestekeisen: list[str]
     bron: BronInfo
     open_punten: list[str]
     volgende_stap: str
 
 
-class TransitionReport(BaseModel):
-    from_photo: int
-    to_photo: int
-    zekerheid: str
-    samenvatting: str
-    bestekposten: list[BestekpostDetail]
-
-
 class Agent2Output(BaseModel):
-    transitions: list[TransitionReport]
-    aandachtspunten_globaal: list[str]
-    extra_input_nodig: list[str]
-
-
-# ---------------------------------------------------------------------------
-# API response helpers
-# ---------------------------------------------------------------------------
-
-class RetrievalLogEntry(BaseModel):
-    bestekpostnummer: str
-    deel: int
-    query: str
-    fragments: list[str]
-
-
-class ProgressReportResponse(BaseModel):
-    markdown_report: str
-    agent2_json: dict
-    agent1_json: dict
-    retrieval_log: list[RetrievalLogEntry]
+    bestekposten: list[BestekpostDetail] = Field(default_factory=list)
+    aandachtspunten_globaal: list[str] = Field(default_factory=list)
+    extra_input_nodig: list[str] = Field(default_factory=list)

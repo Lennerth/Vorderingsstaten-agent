@@ -1,54 +1,41 @@
 {
   "type": "object",
-  "additionalProperties": false,
-  "required": ["transitions", "globale_opmerkingen"],
+  "required": ["bestekposten", "globale_opmerkingen"],
   "properties": {
-    "transitions": {
+    "bestekposten": {
       "type": "array",
       "items": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "from_photo",
-          "to_photo",
-          "observaties",
-          "bestekpostnummers",
-          "zekerheid",
-          "toelichting"
-        ],
+        "required": ["nummer", "image_indices", "camera_labels", "observaties", "zekerheid", "toelichting"],
         "properties": {
-          "from_photo": {
-            "type": "integer",
-            "description": "Index van de vroegere foto (1-based)."
+          "nummer": {"type": "string"},
+          "image_indices": {
+            "type": "array", 
+            "items": {"type": "integer"}
           },
-          "to_photo": {
-            "type": "integer",
-            "description": "Index van de latere foto (1-based)."
+          "camera_labels": {
+            "type": "array", 
+            "items": {"type": "string"}
           },
           "observaties": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Korte visuele veranderingen (max 6)."
-          },
-          "bestekpostnummers": {
-            "type": "array",
-            "items": { "type": "string" },
-            "description": "Bestekpostnummers zoals '30', '30.14'. Uniek, oplopend."
+            "type": "array", 
+            "items": {"type": "string"},
+            "description": "Korte visuele veranderingen. Vermeld ALLEEN nieuw toegevoegd of gewijzigd werk, geen reeds bestaande elementen."
           },
           "zekerheid": {
-            "type": "string",
+            "type": "string", 
             "enum": ["hoog", "middel", "laag"]
           },
           "toelichting": {
-            "anyOf": [{ "type": "string" }, { "type": "null" }],
-            "description": "1 korte zin waarom deze nummers gekozen werden."
+            "anyOf": [{"type": "string"}, {"type": "null"}]
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "globale_opmerkingen": {
-      "anyOf": [{ "type": "string" }, { "type": "null" }],
-      "description": "Eventuele globale opmerkingen."
+      "anyOf": [{"type": "string"}, {"type": "null"}]
     }
-  }
+  },
+  "additionalProperties": false
 }

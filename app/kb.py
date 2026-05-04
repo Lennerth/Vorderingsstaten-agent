@@ -20,34 +20,35 @@ logger = logging.getLogger(__name__)
 # Agent 1 – vision + file_search on master category
 # ---------------------------------------------------------------------------
 
-async def run_agent1(before_b64_url: str, after_b64_url: str) -> tuple[dict, list]:
+async def run_agent1(images: list[tuple[int, str, str, str]]) -> tuple[dict, list]:
     """Return (parsed_json, file_search_annotations)."""
     client = get_client()
     vs_id = get_vector_store_id()
     instructions = load_prompt("agent1_system.txt")
     schema = load_schema("agent1.bestekpostmapping.json")
 
+    # Build input texts
+    text_lines = []
+    for idx, camera_label, role, _ in images:
+        text_lines.append(f"Foto {idx} = {camera_label} {role}")
+    
+    text_lines.append(
+        "\nAnalyseer de overgang van 'voor' naar 'na' voor elke camera en geef de "
+        "bestekpostnummers terug in het gevraagde JSON-formaat. "
+        "Meld uitsluitend het verschil (werk uitgevoerd in deze periode), geen inventaris van de reeds bestaande staat."
+    )
+    
+    content = [{"type": "input_text", "text": "\n".join(text_lines)}]
+    
+    # Append images
+    for _, _, _, data_url in images:
+        content.append({"type": "input_image", "image_url": data_url})
+
     response = await client.responses.create(
         model=get_model(),
+        reasoning={"effort": "high"},
         instructions=instructions,
-        temperature=0.0,
-        input=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_image", "image_url": before_b64_url},
-                    {"type": "input_image", "image_url": after_b64_url},
-                    {
-                        "type": "input_text",
-                        "text": (
-                            "Foto 1 = voor (eerder), Foto 2 = na (later). "
-                            "Analyseer de overgang Foto 1 → Foto 2 en geef de "
-                            "bestekpostnummers terug in het gevraagde JSON-formaat."
-                        ),
-                    },
-                ],
-            }
-        ],
+        input=[{"role": "user", "content": content}],
         tools=[
             {
                 "type": "file_search",
@@ -71,57 +72,13 @@ async def run_agent1(before_b64_url: str, after_b64_url: str) -> tuple[dict, lis
 
     raw_text = _extract_text(response)
     annotations = _extract_file_search_annotations(response)
-    return json.loads(raw_text), annotations
-
-
-# ---------------------------------------------------------------------------
-# Detail retrieval – direct vector-store search (no model inference)
-# ---------------------------------------------------------------------------
-
-async def search_details(
-    bestekpostnummer: str,
-    observaties: list[str],
-    deel: int,
-) -> list[dict]:
-    """Search the detail vector store for fragments matching a bestekpost."""
-    client = get_client()
-    vs_id = get_vector_store_id()
-
-    keywords = " ".join(observaties[:3]) if observaties else ""
-    query = f"bestekpost {bestekpostnummer} {keywords}".strip()
-
+    
     try:
-        search_results = await client.vector_stores.search(
-            vector_store_id=vs_id,
-            query=query,
-            filters={
-                "type": "and",
-                "filters": [
-                    {"type": "eq", "key": "category", "value": "details"},
-                    {"type": "eq", "key": "deel", "value": str(deel)},
-                ],
-            },
-            max_num_results=5,
-        )
-
-        fragments: list[dict] = []
-        for result in search_results.data:
-            text_parts = []
-            for chunk in result.content:
-                if chunk.type == "text":
-                    text_parts.append(chunk.text)
-            fragments.append(
-                {
-                    "text": "\n".join(text_parts),
-                    "filename": result.filename,
-                    "score": result.score,
-                }
-            )
-        return fragments
-
-    except Exception:
-        logger.exception("Detail search failed for %s (deel=%d)", bestekpostnummer, deel)
-        return []
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        parsed = {}
+        
+    return parsed, annotations
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +94,7 @@ async def run_agent2(agent1_json: dict) -> dict:
 
     user_message = (
         "## Agent 1 analyse\n"
-        "Hier zijn de gedetecteerde bestekpostnummers. "
+        "Hier zijn de gedetecteerde bestekposten. "
         "Zoek voor ELK nummer de details op in de knowledge base (gebruik file_search).\n"
         "Focus op bestanden die beginnen met 'Deel-X...' waar X overeenkomt met de eerste cijfers van het bestekpostnummer.\n\n"
         "```json\n"
@@ -147,14 +104,13 @@ async def run_agent2(agent1_json: dict) -> dict:
 
     response = await client.responses.create(
         model=get_model(),
+        reasoning={"effort": "high"},
         instructions=instructions,
         input=[{"role": "user", "content": user_message}],
         tools=[
             {
                 "type": "file_search",
                 "vector_store_ids": [vs_id],
-                # We can't easily filter by metadata per-item here without multiple turns,
-                # so we trust the model/retriever to find the right "Deel-X" files based on content/filename match.
                 "filters": {
                     "type": "eq",
                     "key": "category",
@@ -173,7 +129,12 @@ async def run_agent2(agent1_json: dict) -> dict:
     )
 
     raw_text = _extract_text(response)
-    return json.loads(raw_text)
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        parsed = {}
+        
+    return parsed
 
 
 # ---------------------------------------------------------------------------

@@ -2,59 +2,92 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from app.models import Agent2Output
-
-_HEADER = """\
-# Vorderingsstaat – Automatisch concept
-
-## Input
-- Foto's: Foto 1 (voor) → Foto 2 (na)
-- Datum/tijd: {datum}
-
----
-"""
 
 
 def render_markdown(
     output: Agent2Output,
+    images: list[tuple[int, str, str, str]],
     datum: str = "automatisch gegenereerd",
 ) -> str:
-    parts: list[str] = [_HEADER.format(datum=datum)]
+    parts: list[str] = [
+        "# Vorderingsstaat – Automatisch concept\n",
+        "*(Dit rapport bevat uitsluitend werk dat nieuw is uitgevoerd of gewijzigd tussen de voor- en na-foto's)*\n",
+        "## Input",
+        f"- Datum/tijd: {datum}"
+    ]
 
-    for tr in output.transitions:
-        parts.append(f"## Overgang: Foto {tr.from_photo} → Foto {tr.to_photo}")
-        parts.append(f"**Zekerheid:** {tr.zekerheid}  ")
-        parts.append(f"**Korte samenvatting:** {tr.samenvatting}\n")
+    # Build the camera header
+    # images is [(idx, camera_label, role, data_url), ...]
+    camera_map = defaultdict(dict)
+    for idx, label, role, _ in images:
+        camera_map[label][role] = idx
+        
+    for label, roles in camera_map.items():
+        voor_idx = roles.get("voor", "?")
+        na_idx = roles.get("na", "?")
+        parts.append(f"- {label}: Foto {voor_idx} (voor) → Foto {na_idx} (na)")
+    
+    parts.append("\n---\n")
+    
+    # Per-camera overview section
+    parts.append("## Overzicht per camera\n")
+    
+    # Map camera labels to bestekposten
+    camera_to_bps = defaultdict(list)
+    for bp in output.bestekposten:
+        for label in bp.camera_labels:
+            camera_to_bps[label].append(bp.nummer)
+            
+    for label in camera_map.keys():
+        bps = camera_to_bps.get(label, [])
+        if bps:
+            bps_str = ", ".join(bps)
+            parts.append(f"- **{label}**: {bps_str}")
+        else:
+            parts.append(f"- **{label}**: Geen bestekposten gedetecteerd")
+            
+    parts.append("\n---\n")
 
-        for bp in tr.bestekposten:
-            parts.append(f"### Bestekpost {bp.nummer} – {bp.titel}")
+    # Bestekposten detail section
+    parts.append("## Bestekposten\n")
 
-            parts.append("**Zichtbaar uitgevoerd**")
-            for item in bp.zichtbaar_uitgevoerd:
-                parts.append(f"- {item}")
-            parts.append("")
+    for bp in output.bestekposten:
+        parts.append(f"### Bestekpost {bp.nummer} – {bp.titel}")
+        
+        cameras_str = ", ".join(bp.camera_labels) if bp.camera_labels else "Onbekend"
+        indices_str = ", ".join(map(str, bp.image_indices)) if bp.image_indices else "Onbekend"
+        
+        parts.append(f"**Camera's:** {cameras_str} (Foto's: {indices_str})")
+        parts.append(f"**Zekerheid:** {bp.zekerheid}\n")
 
-            parts.append("**Relevante bestekeisen / uitvoering / controle**")
-            for item in bp.bestekeisen:
-                parts.append(f"- {item}")
-            parts.append("")
+        parts.append("**Uitgevoerd in deze periode**")
+        for item in bp.zichtbaar_uitgevoerd:
+            parts.append(f"- {item}")
+        parts.append("")
 
-            parts.append("**Bron (detailbestek)**")
-            parts.append(f"- Deel: {bp.bron.deel}")
-            parts.append(f"- Sectie: {bp.bron.sectie}")
-            parts.append("- Fragmenten:")
-            for frag in bp.bron.fragmenten:
-                parts.append(f'  - "{frag}"')
-            parts.append("")
+        parts.append("**Relevante bestekeisen / uitvoering / controle**")
+        for item in bp.bestekeisen:
+            parts.append(f"- {item}")
+        parts.append("")
 
-            parts.append("**Open punten / risico's**")
-            for item in bp.open_punten:
-                parts.append(f"- {item}")
-            parts.append("")
+        parts.append("**Bron (detailbestek)**")
+        parts.append(f"- Deel: {bp.bron.deel}")
+        parts.append(f"- Sectie: {bp.bron.sectie}")
+        parts.append("- Fragmenten:")
+        for frag in bp.bron.fragmenten:
+            parts.append(f'  - "{frag}"')
+        parts.append("")
 
-            parts.append("**Volgende stap**")
-            parts.append(f"- {bp.volgende_stap}")
-            parts.append("\n---\n")
+        parts.append("**Open punten / risico's**")
+        for item in bp.open_punten:
+            parts.append(f"- {item}")
+        parts.append("")
+
+        parts.append("**Volgende stap**")
+        parts.append(f"- {bp.volgende_stap}")
+        parts.append("\n---\n")
 
     if output.aandachtspunten_globaal:
         parts.append("## Aandachtspunten (globaal)")

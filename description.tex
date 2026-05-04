@@ -1,0 +1,262 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[dutch]{babel}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{placeins}
+\usepackage{enumitem}
+\usepackage{parskip}
+
+\geometry{margin=2.5cm}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,
+    breaklines=true,
+    captionpos=b,
+    keepspaces=true,
+    numbers=left,
+    numbersep=5pt,
+    showspaces=false,
+    showstringspaces=false,
+    showtabs=false,
+    tabsize=2
+}
+\lstset{style=mystyle}
+
+\title{Vorderingsstaten Agent\\[0.5em]\large Technische Beschrijving}
+\author{AIDA Project Documentatie}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+%-----------------------------------------------------------------------
+\section{Inleiding}
+%-----------------------------------------------------------------------
+
+Dit document beschrijft de werking van de \textbf{Vorderingsstaten Agent},
+een softwaretool die automatisch vorderingsstaatrapporten genereert op
+basis van werffoto's. De gebruiker uploadt twee foto's --- een situatie
+\emph{voor} en een situatie \emph{na} --- en het systeem herkent welke
+werken zijn uitgevoerd en koppelt deze aan de correcte posten in het
+bouwtechnisch bestek. Het eindresultaat is een leesbaar Markdown-rapport
+dat direct klaar is voor review.
+
+Figuur~\ref{fig:multi-agent tool} toont een screenshot van de webinterface.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.5\linewidth]{Voorbeeld_tool.png}
+    \caption{Screenshot van de multi-agent tool}
+    \label{fig:multi-agent tool}
+\end{figure}
+\FloatBarrier
+
+%-----------------------------------------------------------------------
+\section{Kernconcepten}
+%-----------------------------------------------------------------------
+
+Lezers die niet vertrouwd zijn met de onderliggende technologieën vinden
+hier een beknopte uitleg van de begrippen die in dit project een rol
+spelen.
+
+\subsection{Large Language Model (LLM) en Azure OpenAI}
+
+Een \textbf{Large Language Model} is een AI-systeem dat getraind is op
+enorme hoeveelheden tekst en daardoor complexe taal begrijpt en
+genereert. Dit project maakt gebruik van model \texttt{gpt-5.2}, gehost
+op het Microsoft Azure-platform. Een groot voordeel van dit specifieke
+model is dat het ook \emph{afbeeldingen} kan verwerken: het ``kijkt''
+naar een werffoto en beschrijft wat er zichtbaar is.
+
+Azure OpenAI is de Microsoft-variant van OpenAI's API. Het gedrag is
+nagenoeg identiek aan de standaard OpenAI-dienst, maar de verbinding
+loopt via een eigen bedrijfsendpoint. Dat is relevant voor
+beveiligingsbeleid en factuurbeheer.
+
+\subsection{Vector Store en semantisch zoeken}
+
+Een bouwtechnisch bestek beslaat al snel honderden pagina's. Een AI-model
+kan niet al die tekst tegelijk in zijn ``geheugen'' houden. De oplossing
+is een \textbf{Vector Store}: een soort intelligente index die het bestek
+in kleine fragmenten opslaat.
+
+Elk fragment wordt omgezet in een reeks getallen --- een \emph{vector}
+--- die de \emph{betekenis} van de tekst vastlegt. Wanneer het model wil
+opzoeken welke bestekeisen gelden voor ``dakisolatie'', zoekt de Vector
+Store niet op het exacte woord, maar op fragmenten die \emph{inhoudelijk
+verwant} zijn. Dit heet \textbf{semantisch zoeken} en levert veel
+relevantere resultaten op dan een gewone trefwoordzoekopdracht.
+
+In dit project bevatten de Vector Store twee soorten documenten:
+\begin{itemize}
+    \item De \textbf{master-inhoudstafel} met alle bestekpostnummers en hun
+          omschrijving --- als snelle index.
+    \item De \textbf{tien deelbestekken} (Deel-0 t/m Deel-9) met de volledige
+          technische eisen per post.
+\end{itemize}
+
+\subsection{Retrieval-Augmented Generation (RAG)}
+
+RAG is de techniek die hallucinaties (het verzinnen van feiten) sterk
+vermindert. In plaats van puur op zijn getrainde kennis te steunen,
+\emph{zoekt} het model eerst de relevante bestekfragmenten op voordat het
+een antwoord genereert. Het rapport is daardoor gebaseerd op de werkelijke
+bestektekst, niet op aannames.
+
+%-----------------------------------------------------------------------
+\section{Werking van de applicatie}
+%-----------------------------------------------------------------------
+
+Het systeem doorloopt vijf opeenvolgende stappen voor elke aanvraag.
+
+\subsection{Stap 1 --- Input en optimalisatie}
+
+De gebruiker uploadt twee foto's via een eenvoudige webpagina of via de
+API. Omdat werffoto's van een moderne smartphone al snel 10--20~MB groot
+zijn, worden ze automatisch verkleind (maximaal 2048$\times$2048~pixels)
+en gecomprimeerd. Dit versnelt de verwerking en verlaagt de kosten.
+
+Vóór de foto's worden verwerkt controleert het systeem ook of er
+voldoende geheugen en rekenkracht beschikbaar zijn. Dreigt de server
+overbelast te raken, dan wordt de aanvraag netjes geweigerd met een
+foutmelding in plaats van onverwacht te crashen.
+
+\subsection{Stap 2 --- Agent 1: de visuele inspecteur}
+
+De eerste AI-agent bekijkt de twee foto's en analyseert het visuele
+verschil. Zijn enige taak is observeren en classificeren. Hij zoekt in de
+master-inhoudstafel naar de \emph{bestekpostnummers} die het beste
+aansluiten bij wat er zichtbaar is bijgekomen, verwijderd of gewijzigd.
+
+De output van Agent~1 is een strikt gestructureerd JSON-document met:
+\begin{itemize}
+    \item de gevonden bestekpostnummers (bijv.\ \texttt{30.14}),
+    \item korte visuele observaties per overgang,
+    \item een zekerheidsscore: \emph{hoog}, \emph{middel} of \emph{laag}.
+\end{itemize}
+
+Agent~1 mag uitsluitend nummers gebruiken die letterlijk in de
+master-inhoudstafel staan. Twijfelgevallen worden weggelaten of
+teruggebracht tot een meer algemene post.
+
+\subsection{Stap 3 --- Agent 2: de rapporteur}
+
+De tweede AI-agent ontvangt de output van Agent~1 en gaat aan de slag
+met het detailbestek. Via de \texttt{file\_search}-tool raadpleegt hij
+automatisch de relevante deelbestekken om de technische eisen op te
+halen die bij elk gevonden bestekpostnummer horen.
+
+Op basis van die informatie schrijft Agent~2 het definitieve
+vorderingsstaatrapport. Per bestekpost beschrijft hij wat er zichtbaar
+is uitgevoerd, welke bestekeisen van toepassing zijn, wat de bronreferentie
+is in het bestek, en welke open punten of risico's er bestaan.
+
+\subsection{Stap 4 --- MVP-regel bij lage zekerheid}
+
+Na het rapport van Agent~2 controleert het systeem de zekerheidsscore van
+Agent~1. Is die \emph{laag}, dan wordt automatisch de melding
+``\textbf{Manuele check / extra foto nodig}'' toegevoegd aan de relevante
+bestekposten. Dit is een harde regel die niet door de AI overgeslagen kan
+worden.
+
+\subsection{Stap 5 --- Output en logging}
+
+Het eindrapport wordt teruggegeven als leesbaar Markdown-document en is
+direct te bekijken in de webinterface. Tegelijk slaat het systeem een
+gedetailleerd logbestand op (in \texttt{.jsonl}-formaat) met de volledige
+tussentijdse output van beide agenten, alle tijdsmetingen per stap, en
+een unieke aanvraag-ID. Dat maakt het achteraf eenvoudig om de kwaliteit
+van de output te beoordelen en problemen te traceren.
+
+%-----------------------------------------------------------------------
+\section{Eenmalige initialisatie: kennisbank opbouwen}
+%-----------------------------------------------------------------------
+
+Voordat de applicatie gebruikt kan worden, moet de Vector Store eenmalig
+worden gevuld. Dit gebeurt via het script \texttt{scripts/init\_kb.py}.
+Het script:
+\begin{enumerate}
+    \item maakt één Vector Store aan op Azure,
+    \item uploadt de master-inhoudstafel met de juiste metadata,
+    \item uploadt alle tien deelbestekken elk met hun eigen metadatalabel
+          (\texttt{deel=0} t/m \texttt{deel=9}),
+    \item wacht tot elk bestand volledig geïndexeerd is, en
+    \item schrijft de unieke \texttt{VECTOR\_STORE\_ID} weg naar het
+          \texttt{.env}-configuratiebestand.
+\end{enumerate}
+
+Dit hoeft maar één keer uitgevoerd te worden, tenzij de bestekken worden
+bijgewerkt.
+
+%-----------------------------------------------------------------------
+\section{Systeeminstructies}
+%-----------------------------------------------------------------------
+
+De intelligentie van de agenten wordt aangestuurd via zogenaamde
+\emph{system prompts}: een set instructies die de AI bij elke aanvraag
+meegeeft. Hieronder staan de exacte instructies voor beide agenten.
+
+\subsection{Agent 1 --- Visie en bestekpostmapping}
+
+\lstinputlisting[
+  language={},
+  caption={Systeeminstructies Agent 1 (prompts/agent1\_system.txt)},
+  label={lst:agent1}
+]{prompts/agent1_system.txt}
+
+\subsection{Agent 2 --- Rapportage}
+
+\lstinputlisting[
+  language={},
+  caption={Systeeminstructies Agent 2 (prompts/agent2\_system.txt)},
+  label={lst:agent2}
+]{prompts/agent2_system.txt}
+
+%-----------------------------------------------------------------------
+\section{Configuratie}
+%-----------------------------------------------------------------------
+
+De applicatie heeft slechts twee configuratiewaarden nodig die de
+gebruiker zelf moet invullen in een \texttt{.env}-bestand:
+\begin{itemize}
+    \item \texttt{AZURE\_OPENAI\_API\_KEY} --- de persoonlijke sleutel
+          voor de Azure-dienst.
+    \item \texttt{VECTOR\_STORE\_ID} --- wordt automatisch ingevuld door
+          het initialisatiescript.
+\end{itemize}
+
+Alle overige instellingen (endpoint-URL, deployment-naam, API-versie)
+zijn vastgelegd in de broncode en hoeven niet apart geconfigureerd te
+worden.
+
+%-----------------------------------------------------------------------
+\section{Conclusie}
+%-----------------------------------------------------------------------
+
+Door de taken te verdelen over twee gespecialiseerde agenten --- één die
+kijkt, en één die schrijft --- combineert het systeem visuele analyse met
+diepgaande bestek\-kennis. De Vector Store garandeert dat het rapport
+gebaseerd is op de werkelijke bestektekst. De ingebouwde
+zekerheidsbeoordeling en verplichte waarschuwingen bij lage zekerheid
+zorgen ervoor dat de output bruikbaar en eerlijk is, ook wanneer de
+foto-invoer onvolledig is.
+
+\end{document}

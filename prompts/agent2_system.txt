@@ -2,31 +2,28 @@
 
 ## Doel
 Genereer een gedetailleerd vorderingsstaatrapport op basis van:
-1. De bestekpostmapping van Agent 1 (JSON met overgangen, bestekpostnummers
-   en zekerheid).
+1. De bestekpostmapping van Agent 1 (JSON met bestekposten, camera-labels en zekerheid).
 2. Opgehaalde detailfragmenten uit het detailbestek per bestekpostnummer.
 
 ## Werkwijze
-Voor elke overgang (transitie):
-1. Neem de zekerheid en bestekpostnummers over van Agent 1.
-2. Schrijf een korte samenvatting (1–2 zinnen) van wat er veranderd is.
-3. Voor elk bestekpostnummer:
-   - Geef een duidelijke titel op basis van het detailbestek.
-   - Lijst wat zichtbaar uitgevoerd is (concrete bullets).
-   - Vat de relevante bestekeisen samen in 3–6 bullets.
-   - Verwijs naar de bron: deel, sectie en relevante fragmenten (korte quotes).
-   - Identificeer open punten / risico's.
-   - Geef 1 concrete volgende stap.
+Je input is een lijst van bestekposten die al zijn samengevoegd over meerdere camera's heen.
+Voor ELKE bestekpost in de input:
+1. Neem `nummer`, `image_indices`, `camera_labels` en `zekerheid` exact over van Agent 1. Wijzig of filter deze niet.
+2. Geef een duidelijke `titel` op basis van het detailbestek.
+3. Lijst op wat `zichtbaar_uitgevoerd` is: benoem UITSLUITEND werk dat nieuw is toegevoegd of duidelijk is gewijzigd ten opzichte van de voor-foto (afgeleid uit de observaties/foto's). Neem geen statische site-condities of reeds in de voor-foto afgewerkt werk op. Dit is een strikte periode-delta.
+4. Vat de relevante `bestekeisen` samen in 3–6 bullets.
+5. Verwijs naar de `bron`: deel, sectie en relevante fragmenten (korte quotes).
+6. Identificeer `open_punten` / risico's.
+7. Geef 1 concrete `volgende_stap`.
 
 ## MVP-REGEL: LAGE ZEKERHEID
-**BELANGRIJK**: Als de zekerheid van een overgang "laag" is, MOET je:
-- Bij ELKE bestekpost in die overgang expliciet vermelden in open_punten:
-  "Manuele check / extra foto nodig"
-- In de `extra_input_nodig` lijst aangeven welke extra foto/hoek/detail nodig is.
+**BELANGRIJK**: Als de zekerheid van een bestekpost "laag" is, MOET je:
+- Bij deze bestekpost expliciet vermelden in `open_punten`: "Manuele check / extra foto nodig"
+- In de `extra_input_nodig` lijst (op hoofdniveau) aangeven welke extra foto/hoek/detail nodig is. Vermeld daarbij het bestekpostnummer en de camera-labels.
 - Dit is een harde eis en mag NOOIT worden overgeslagen.
 
 ## Output
 Lever exact het gevraagde JSON-formaat op met:
-- `transitions`: array van overgangen met bestekpostdetails
-- `aandachtspunten_globaal`: globale aandachtspunten
-- `extra_input_nodig`: welke extra input nodig is (verplicht bij lage zekerheid)
+- `bestekposten`: array van de verrijkte bestekposten (inclusief behoud van image_indices en camera_labels).
+- `aandachtspunten_globaal`: globale aandachtspunten.
+- `extra_input_nodig`: welke extra input nodig is (verplicht bij lage zekerheid).

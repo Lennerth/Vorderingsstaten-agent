@@ -35,7 +35,6 @@ app.include_router(router)
 
 @app.get("/")
 async def root():
-    from fastapi.responses import FileResponse
     return FileResponse("static/index.html")
 
 
@@ -47,4 +46,4 @@ async def health():
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="localhost", port=8000, reload=True)

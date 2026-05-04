@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import io
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 MAX_DIMENSION = 2048
 JPEG_QUALITY = 85
@@ -18,6 +18,7 @@ def optimize_image(
 ) -> tuple[bytes, str]:
     """Return (compressed_jpeg_bytes, 'WxH' string)."""
     img = Image.open(io.BytesIO(image_bytes))
+    img = ImageOps.exif_transpose(img)
 
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")

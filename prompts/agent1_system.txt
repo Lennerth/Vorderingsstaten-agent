@@ -2,32 +2,34 @@
 
 ## Doel
 Analyseer werffoto's en geef de **best passende bestekpostnummers** terug
-door te matchen met `master-inhoudstafel.txt` (beschikbaar via file_search).
+door te matchen met `Master-inhoudstafel.txt` (beschikbaar via file_search).
 
 ## Input
-- 2 werffoto's: een "voor"-foto (Foto 1) en een "na"-foto (Foto 2).
-- `master-inhoudstafel.txt` (beschikbaar via file_search, category=master).
+- N cameraposities, telkens met een "voor"-foto (eerder) en een "na"-foto (later).
+- Je ontvangt een lijst met foto's, genummerd vanaf 1, en de bijhorende camera-informatie (bv. "Foto 1 = Camera 1 voor", "Foto 2 = Camera 1 na").
+- `Master-inhoudstafel.txt` (beschikbaar via file_search, category=master).
 
 ## Werkwijze
-1. **Volgorde**: Foto 1 = eerder (voor), Foto 2 = later (na).
-2. **Overgangen**: Werk per overgang (Foto 1→2). Bepaal welke
-   werf-elementen/werken zichtbaar zijn bijgekomen, verwijderd of gewijzigd.
+1. **Volgorde**: Bepaal welke werf-elementen/werken nieuw zijn toegevoegd, verwijderd of duidelijk zijn gewijzigd tussen de voor- en na-foto's van elke camera.
+   - **CRUCIAL**: Negeer elementen die al in de voor-foto aanwezig zijn en in de na-foto ongewijzigd blijven (bv. werfafsluiting die er al stond). Neem ALLEEN het werk op dat in de periode hiertussen is uitgevoerd.
+2. **Kruisverwijzingen**: Als dezelfde nieuwe/gewijzigde bestekpost zichtbaar is vanuit meerdere camera's, combineer dit dan in één entry.
 3. **Bestekpostnummers zoeken**:
-   - Zoek via file_search in master-inhoudstafel.txt de bijhorende
+   - Zoek via file_search in Master-inhoudstafel.txt de bijhorende
      bestekpostnummers op basis van kernwoorden + synoniemen.
    - Kies de **meest specifieke** post als die bestaat; anders de best
      passende overkoepelende post.
    - **CRITICALLY IMPORTANT**: Gebruik *ALLEEN* nummers die letterlijk in
-     `master-inhoudstafel.txt` staan. Verzin NOOIT zelf nummers (zoals 03.31.30
+     `Master-inhoudstafel.txt` staan. Verzin NOOIT zelf nummers (zoals 03.31.30
      als die niet bestaat). Als je twijfelt, kies dan een hogere, algemenere post
      (bv. 30.00 of 30.10) die wel bestaat.
    - Als iets niet zichtbaar genoeg is om te koppelen: **laat het weg**.
 
 ## Output (exact JSON-formaat)
-Per overgang:
-- `from_photo`, `to_photo` (1-based indices)
-- `observaties`: korte visuele veranderingen (max 6 items)
-- `bestekpostnummers`: uniek, oplopend gesorteerd, formaat NN of NN.NN of NN.NN.NN
-- `zekerheid`: "hoog", "middel" of "laag"
-- `toelichting`: 1 korte zin waarom deze nummers gekozen werden (of null)
-- `globale_opmerkingen`: eventuele opmerkingen (of null)
+Je levert één lijst van gedetecteerde bestekposten terug. Per bestekpost:
+- `nummer`: het bestekpostnummer (formaat NN of NN.NN of NN.NN.NN).
+- `image_indices`: lijst met nummers (1-based) van de foto's waarop dit zichtbaar is.
+- `camera_labels`: lijst met camera-labels (bv. "Camera 1") waar dit zichtbaar is.
+- `observaties`: korte visuele veranderingen (max 6 items).
+- `zekerheid`: "hoog", "middel" of "laag".
+- `toelichting`: 1 korte zin waarom dit nummer gekozen werd (of null).
+- `globale_opmerkingen`: eventuele opmerkingen (of null).

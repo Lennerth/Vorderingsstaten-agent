@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.logging_utils import generate_request_id
+from app.output_storage import save_report_output
 from app.orchestrator import run_pipeline
 from app.utils.system_monitor import check_resources
 
@@ -15,24 +17,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_IMAGE_SIZE = 20 * 1024 * 1024  # 20 MB per image
+MAX_TOTAL_SIZE = 120 * 1024 * 1024 # 120 MB total
+MAX_PAIRS = 6
 
 
 @router.post("/progress-report")
 async def progress_report(
-    before: UploadFile = File(..., description="Foto voor (eerder)"),
-    after: UploadFile = File(..., description="Foto na (later)"),
+    before_images: list[UploadFile] = File(...),
+    after_images: list[UploadFile] = File(...),
+    camera_labels: str = Form("[]"),
 ):
     request_id = generate_request_id()
+    
+    n_pairs = len(before_images)
     logger.info(
-        "[%s] Incoming request  before=%s  after=%s",
+        "[%s] Incoming request: %d pairs",
         request_id,
-        before.filename,
-        after.filename,
+        n_pairs,
     )
+
+    if n_pairs != len(after_images):
+        raise HTTPException(400, "Number of before and after images must match.")
+
+    if not (1 <= n_pairs <= MAX_PAIRS):
+        raise HTTPException(400, f"Number of pairs must be between 1 and {MAX_PAIRS}.")
 
     ok, resources = check_resources()
     if not ok:
-        logger.warning("[%s] Insufficient resources: %s", request_id, resources)
+        logger.warning("[%s] Insufficient resources (pair_count=%d): %s", request_id, n_pairs, resources)
         raise HTTPException(
             status_code=503,
             detail=(
@@ -42,22 +54,66 @@ async def progress_report(
             ),
         )
 
-    before_bytes = await before.read()
-    after_bytes = await after.read()
+    try:
+        parsed_labels = json.loads(camera_labels)
+        if not isinstance(parsed_labels, list) or len(parsed_labels) != n_pairs:
+            raise ValueError()
+        labels = [str(l) for l in parsed_labels]
+    except Exception:
+        labels = [f"Camera {i+1}" for i in range(n_pairs)]
 
-    if not before_bytes or not after_bytes:
-        raise HTTPException(400, "Both before and after images are required.")
+    camera_pairs = []
+    uploaded_image_names = []
+    total_size = 0
 
-    if len(before_bytes) > MAX_IMAGE_SIZE or len(after_bytes) > MAX_IMAGE_SIZE:
+    for i in range(n_pairs):
+        before = before_images[i]
+        after = after_images[i]
+
+        before_bytes = await before.read()
+        after_bytes = await after.read()
+
+        if not before_bytes or not after_bytes:
+            raise HTTPException(400, f"Empty file detected in pair {i+1}.")
+
+        if len(before_bytes) > MAX_IMAGE_SIZE or len(after_bytes) > MAX_IMAGE_SIZE:
+            raise HTTPException(
+                400,
+                f"Image in pair {i+1} exceeds max size of {MAX_IMAGE_SIZE // (1024 * 1024)} MB.",
+            )
+
+        total_size += len(before_bytes) + len(after_bytes)
+
+        camera_pairs.append({
+            "camera_label": labels[i],
+            "before_bytes": before_bytes,
+            "after_bytes": after_bytes,
+        })
+        uploaded_image_names.append(
+            {
+                "camera_label": labels[i],
+                "before_filename": before.filename or f"camera_{i + 1}_before",
+                "after_filename": after.filename or f"camera_{i + 1}_after",
+            }
+        )
+
+    if total_size > MAX_TOTAL_SIZE:
         raise HTTPException(
             400,
-            f"Image exceeds max size of {MAX_IMAGE_SIZE // (1024 * 1024)} MB.",
+            f"Total upload size exceeds max size of {MAX_TOTAL_SIZE // (1024 * 1024)} MB."
         )
 
     try:
-        result = await run_pipeline(before_bytes, after_bytes, request_id)
+        result = await run_pipeline(camera_pairs, request_id)
     except Exception:
         logger.exception("[%s] Pipeline failed", request_id)
         raise HTTPException(500, "Internal pipeline error – see server logs.")
+
+    try:
+        output_dir = save_report_output(result, uploaded_image_names)
+        logger.info("[%s] Output artifacts saved to %s", request_id, output_dir)
+    except Exception:
+        logger.exception("[%s] Failed to store output artifacts", request_id)
+        raise HTTPException(500, "Report generated but storing output files failed.")
 
     return result

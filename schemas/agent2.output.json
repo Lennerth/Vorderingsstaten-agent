@@ -1,78 +1,67 @@
 {
   "type": "object",
-  "additionalProperties": false,
-  "required": ["transitions", "aandachtspunten_globaal", "extra_input_nodig"],
+  "required": ["bestekposten", "aandachtspunten_globaal", "extra_input_nodig"],
   "properties": {
-    "transitions": {
+    "bestekposten": {
       "type": "array",
       "items": {
         "type": "object",
-        "additionalProperties": false,
         "required": [
-          "from_photo",
-          "to_photo",
+          "nummer",
+          "titel",
+          "image_indices",
+          "camera_labels",
           "zekerheid",
-          "samenvatting",
-          "bestekposten"
+          "zichtbaar_uitgevoerd",
+          "bestekeisen",
+          "bron",
+          "open_punten",
+          "volgende_stap"
         ],
         "properties": {
-          "from_photo": { "type": "integer" },
-          "to_photo": { "type": "integer" },
+          "nummer": { "type": "string" },
+          "titel": { "type": "string" },
+          "image_indices": {
+            "type": "array",
+            "items": { "type": "integer" }
+          },
+          "camera_labels": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
           "zekerheid": {
             "type": "string",
             "enum": ["hoog", "middel", "laag"]
           },
-          "samenvatting": {
-            "type": "string",
-            "description": "1-2 zinnen over wat er veranderd is."
-          },
-          "bestekposten": {
+          "zichtbaar_uitgevoerd": {
             "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "nummer",
-                "titel",
-                "zichtbaar_uitgevoerd",
-                "bestekeisen",
-                "bron",
-                "open_punten",
-                "volgende_stap"
-              ],
-              "properties": {
-                "nummer": { "type": "string" },
-                "titel": { "type": "string" },
-                "zichtbaar_uitgevoerd": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                },
-                "bestekeisen": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                },
-                "bron": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": ["deel", "sectie", "fragmenten"],
-                  "properties": {
-                    "deel": { "type": "string" },
-                    "sectie": { "type": "string" },
-                    "fragmenten": {
-                      "type": "array",
-                      "items": { "type": "string" }
-                    }
-                  }
-                },
-                "open_punten": {
-                  "type": "array",
-                  "items": { "type": "string" }
-                },
-                "volgende_stap": { "type": "string" }
+            "items": { "type": "string" },
+            "description": "Werk dat in de periode hiertussen nieuw is uitgevoerd of duidelijk is gewijzigd. Sluit ongewijzigde statische omstandigheden uit."
+          },
+          "bestekeisen": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "bron": {
+            "type": "object",
+            "required": ["deel", "sectie", "fragmenten"],
+            "properties": {
+              "deel": { "type": "string" },
+              "sectie": { "type": "string" },
+              "fragmenten": {
+                "type": "array",
+                "items": { "type": "string" }
               }
-            }
-          }
-        }
+            },
+            "additionalProperties": false
+          },
+          "open_punten": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "volgende_stap": { "type": "string" }
+        },
+        "additionalProperties": false
       }
     },
     "aandachtspunten_globaal": {
@@ -83,5 +72,6 @@
       "type": "array",
       "items": { "type": "string" }
     }
-  }
+  },
+  "additionalProperties": false
 }

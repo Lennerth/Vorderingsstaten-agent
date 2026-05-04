@@ -1,0 +1,13 @@
+Uploaded images used for report generation
+
+Camera 1:
+- before: cam1_2026-02-28_08-00-04.jpeg
+- after: cam1_2026-03-31_07-00-03.jpeg
+
+Camera 2:
+- before: cam2_2026-02-28_08-00-03.jpeg
+- after: cam2_2026-03-31_07-00-04.jpeg
+
+Camera 3:
+- before: cam3_2026-02-26_13-35-02.jpeg
+- after: cam3_2026-03-31_07-00-02.jpeg
