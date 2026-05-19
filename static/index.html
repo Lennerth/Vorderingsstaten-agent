@@ -23,6 +23,9 @@
         .camera-block { border: 1px solid #eee; padding: 15px; margin-bottom: 15px; border-radius: 4px; background: #fafafa; }
         .camera-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
         .camera-label-input { font-size: 16px; padding: 5px; width: 60%; }
+        .form-control { width: 100%; box-sizing: border-box; padding: 8px; margin-top: 5px; }
+        .options-section { border-top: 1px solid #eee; margin-top: 15px; padding-top: 15px; }
+        .checkbox-list label { display: block; margin: 4px 0; }
         .spinner { font-style: italic; color: #666; }
     </style>
 </head>
@@ -37,6 +40,27 @@
             <div id="camera-blocks"></div>
             <button type="button" id="addCameraBtn" class="secondary">+ Camera toevoegen</button>
             <br><br>
+            <div class="options-section">
+                <label for="bestekpostFilter"><strong>Bestekpost filter (optioneel):</strong></label>
+                <input
+                    type="text"
+                    id="bestekpostFilter"
+                    class="form-control"
+                    placeholder="01-03, 05.82-05.89, 10.20"
+                >
+
+                <p><strong>Rapportvelden:</strong></p>
+                <div class="checkbox-list">
+                    <label><input type="checkbox" class="report-field" value="zichtbaar_uitgevoerd" checked> Uitgevoerd in deze periode</label>
+                    <label><input type="checkbox" class="report-field" value="bestekeisen" checked> Bestekeisen</label>
+                    <label><input type="checkbox" class="report-field" value="bron" checked> Bron detailbestek</label>
+                    <label><input type="checkbox" class="report-field" value="image_indices" checked> Foto indices</label>
+                    <label><input type="checkbox" class="report-field" value="camera_labels" checked> Camera labels</label>
+                    <label><input type="checkbox" class="report-field" value="open_punten" checked> Open punten / risico's</label>
+                    <label><input type="checkbox" class="report-field" value="volgende_stap" checked> Volgende stap</label>
+                </div>
+            </div>
+            <br>
             <button type="submit" id="submitBtn" style="width: 100%; font-size: 18px; padding: 15px;">Genereer Rapport</button>
         </form>
         <div id="status"></div>
@@ -192,6 +216,14 @@
         }
 
         formData.append('camera_labels', JSON.stringify(cameraLabels));
+        const bestekpostFilter = document.getElementById('bestekpostFilter').value.trim();
+        if (bestekpostFilter) {
+            formData.append('bestekpost_filter', bestekpostFilter);
+        }
+
+        const reportFields = Array.from(document.querySelectorAll('.report-field:checked'))
+            .map(checkbox => checkbox.value);
+        formData.append('report_fields', JSON.stringify(reportFields));
 
         const submitBtn = document.getElementById('submitBtn');
         const statusDiv = document.getElementById('status');

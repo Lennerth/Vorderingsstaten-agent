@@ -31,24 +31,23 @@ def render_markdown(
     
     parts.append("\n---\n")
     
-    # Per-camera overview section
-    parts.append("## Overzicht per camera\n")
-    
-    # Map camera labels to bestekposten
+    # Per-camera overview section. Only render if Agent 2 returned camera labels.
     camera_to_bps = defaultdict(list)
     for bp in output.bestekposten:
-        for label in bp.camera_labels:
+        for label in bp.camera_labels or []:
             camera_to_bps[label].append(bp.nummer)
-            
-    for label in camera_map.keys():
-        bps = camera_to_bps.get(label, [])
-        if bps:
-            bps_str = ", ".join(bps)
-            parts.append(f"- **{label}**: {bps_str}")
-        else:
-            parts.append(f"- **{label}**: Geen bestekposten gedetecteerd")
-            
-    parts.append("\n---\n")
+
+    if camera_to_bps:
+        parts.append("## Overzicht per camera\n")
+        for label in camera_map.keys():
+            bps = camera_to_bps.get(label, [])
+            if bps:
+                bps_str = ", ".join(bps)
+                parts.append(f"- **{label}**: {bps_str}")
+            else:
+                parts.append(f"- **{label}**: Geen bestekposten gedetecteerd")
+
+        parts.append("\n---\n")
 
     # Bestekposten detail section
     parts.append("## Bestekposten\n")
@@ -56,37 +55,42 @@ def render_markdown(
     for bp in output.bestekposten:
         parts.append(f"### Bestekpost {bp.nummer} – {bp.titel}")
         
-        cameras_str = ", ".join(bp.camera_labels) if bp.camera_labels else "Onbekend"
-        indices_str = ", ".join(map(str, bp.image_indices)) if bp.image_indices else "Onbekend"
-        
-        parts.append(f"**Camera's:** {cameras_str} (Foto's: {indices_str})")
+        if bp.camera_labels is not None or bp.image_indices is not None:
+            cameras_str = ", ".join(bp.camera_labels or []) if bp.camera_labels else "Onbekend"
+            indices_str = ", ".join(map(str, bp.image_indices or [])) if bp.image_indices else "Onbekend"
+            parts.append(f"**Camera's:** {cameras_str} (Foto's: {indices_str})")
         parts.append(f"**Zekerheid:** {bp.zekerheid}\n")
 
-        parts.append("**Uitgevoerd in deze periode**")
-        for item in bp.zichtbaar_uitgevoerd:
-            parts.append(f"- {item}")
-        parts.append("")
+        if bp.zichtbaar_uitgevoerd is not None:
+            parts.append("**Uitgevoerd in deze periode**")
+            for item in bp.zichtbaar_uitgevoerd:
+                parts.append(f"- {item}")
+            parts.append("")
 
-        parts.append("**Relevante bestekeisen / uitvoering / controle**")
-        for item in bp.bestekeisen:
-            parts.append(f"- {item}")
-        parts.append("")
+        if bp.bestekeisen is not None:
+            parts.append("**Relevante bestekeisen / uitvoering / controle**")
+            for item in bp.bestekeisen:
+                parts.append(f"- {item}")
+            parts.append("")
 
-        parts.append("**Bron (detailbestek)**")
-        parts.append(f"- Deel: {bp.bron.deel}")
-        parts.append(f"- Sectie: {bp.bron.sectie}")
-        parts.append("- Fragmenten:")
-        for frag in bp.bron.fragmenten:
-            parts.append(f'  - "{frag}"')
-        parts.append("")
+        if bp.bron is not None:
+            parts.append("**Bron (detailbestek)**")
+            parts.append(f"- Deel: {bp.bron.deel}")
+            parts.append(f"- Sectie: {bp.bron.sectie}")
+            parts.append("- Fragmenten:")
+            for frag in bp.bron.fragmenten:
+                parts.append(f'  - "{frag}"')
+            parts.append("")
 
-        parts.append("**Open punten / risico's**")
-        for item in bp.open_punten:
-            parts.append(f"- {item}")
-        parts.append("")
+        if bp.open_punten is not None:
+            parts.append("**Open punten / risico's**")
+            for item in bp.open_punten:
+                parts.append(f"- {item}")
+            parts.append("")
 
-        parts.append("**Volgende stap**")
-        parts.append(f"- {bp.volgende_stap}")
+        if bp.volgende_stap is not None:
+            parts.append("**Volgende stap**")
+            parts.append(f"- {bp.volgende_stap}")
         parts.append("\n---\n")
 
     if output.aandachtspunten_globaal:

@@ -36,14 +36,17 @@ class BronInfo(BaseModel):
 class BestekpostDetail(BaseModel):
     nummer: str
     titel: str
-    image_indices: list[int] = Field(default_factory=list)
-    camera_labels: list[str] = Field(default_factory=list)
+    image_indices: list[int] | None = None
+    camera_labels: list[str] | None = None
     zekerheid: str = Field(pattern=r"^(hoog|middel|laag)$")
-    zichtbaar_uitgevoerd: list[str] = Field(description="Werk uitgevoerd in deze periode (delta), geen statische site-condities.")
-    bestekeisen: list[str]
-    bron: BronInfo
-    open_punten: list[str]
-    volgende_stap: str
+    zichtbaar_uitgevoerd: list[str] | None = Field(
+        default=None,
+        description="Werk uitgevoerd in deze periode (delta), geen statische site-condities.",
+    )
+    bestekeisen: list[str] | None = None
+    bron: BronInfo | None = None
+    open_punten: list[str] | None = None
+    volgende_stap: str | None = None
 
 
 class Agent2Output(BaseModel):

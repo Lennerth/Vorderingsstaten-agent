@@ -6,7 +6,12 @@ import json
 from pathlib import Path
 
 
-def save_report_output(result: dict, uploaded_images: list[dict]) -> Path:
+def save_report_output(
+    result: dict,
+    uploaded_images: list[dict],
+    report_fields: list[str],
+    bestekpost_filters: list[str],
+) -> Path:
     """Save markdown, uploaded filenames, and JSON output for one request."""
     outputs_root = Path("outputs")
     output_dir = _create_next_output_dir(outputs_root)
@@ -31,6 +36,27 @@ def save_report_output(result: dict, uploaded_images: list[dict]) -> Path:
         encoding="utf-8",
     )
 
+    options_lines = [
+        "Report generation options",
+        "",
+        "Rapportvelden:",
+    ]
+    if report_fields:
+        options_lines.extend(f"- {field}" for field in report_fields)
+    else:
+        options_lines.append("- (none selected)")
+
+    options_lines.extend(["", "Bestekpost filter:"])
+    if bestekpost_filters:
+        options_lines.extend(f"- {filter_value}" for filter_value in bestekpost_filters)
+    else:
+        options_lines.append("- (none)")
+
+    (output_dir / "request_options.txt").write_text(
+        "\n".join(options_lines).rstrip() + "\n",
+        encoding="utf-8",
+    )
+
     (output_dir / "output.json").write_text(
         json.dumps(result, ensure_ascii=False, indent=2),
         encoding="utf-8",
@@ -41,9 +67,14 @@ def save_report_output(result: dict, uploaded_images: list[dict]) -> Path:
 
 def _create_next_output_dir(outputs_root: Path) -> Path:
     outputs_root.mkdir(parents=True, exist_ok=True)
-    index = 1
+    existing_indices = [
+        index
+        for path in outputs_root.iterdir()
+        if path.is_dir() and (index := _output_index_from_name(path.name)) is not None
+    ]
+    index = max(existing_indices, default=0) + 1
     while True:
-        dir_name = f"output {_number_to_words(index)}"
+        dir_name = f"output {index:02d}"
         candidate = outputs_root / dir_name
         try:
             candidate.mkdir(parents=False, exist_ok=False)
@@ -52,65 +83,24 @@ def _create_next_output_dir(outputs_root: Path) -> Path:
             index += 1
 
 
-def _number_to_words(number: int) -> str:
-    if number <= 0:
-        raise ValueError("number must be a positive integer")
+def _output_index_from_name(name: str) -> int | None:
+    if not name.startswith("output "):
+        return None
 
-    ones = {
-        0: "zero",
-        1: "one",
-        2: "two",
-        3: "three",
-        4: "four",
-        5: "five",
-        6: "six",
-        7: "seven",
-        8: "eight",
-        9: "nine",
-    }
-    teens = {
-        10: "ten",
-        11: "eleven",
-        12: "twelve",
-        13: "thirteen",
-        14: "fourteen",
-        15: "fifteen",
-        16: "sixteen",
-        17: "seventeen",
-        18: "eighteen",
-        19: "nineteen",
-    }
-    tens = {
-        2: "twenty",
-        3: "thirty",
-        4: "forty",
-        5: "fifty",
-        6: "sixty",
-        7: "seventy",
-        8: "eighty",
-        9: "ninety",
-    }
+    suffix = name.removeprefix("output ").strip().lower()
+    if suffix.isdigit():
+        return int(suffix)
 
-    if number < 10:
-        return ones[number]
-    if number < 20:
-        return teens[number]
-    if number < 100:
-        ten_digit, remainder = divmod(number, 10)
-        return tens[ten_digit] if remainder == 0 else f"{tens[ten_digit]} {ones[remainder]}"
-    if number < 1000:
-        hundred_digit, remainder = divmod(number, 100)
-        prefix = f"{ones[hundred_digit]} hundred"
-        return prefix if remainder == 0 else f"{prefix} {_number_to_words(remainder)}"
-    if number < 1_000_000:
-        thousand_digit, remainder = divmod(number, 1000)
-        prefix = f"{_number_to_words(thousand_digit)} thousand"
-        return prefix if remainder == 0 else f"{prefix} {_number_to_words(remainder)}"
-    if number < 1_000_000_000:
-        million_digit, remainder = divmod(number, 1_000_000)
-        prefix = f"{_number_to_words(million_digit)} million"
-        return prefix if remainder == 0 else f"{prefix} {_number_to_words(remainder)}"
-
-    billion_digit, remainder = divmod(number, 1_000_000_000)
-    prefix = f"{_number_to_words(billion_digit)} billion"
-    return prefix if remainder == 0 else f"{prefix} {_number_to_words(remainder)}"
+    legacy_names = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+    return legacy_names.get(suffix)

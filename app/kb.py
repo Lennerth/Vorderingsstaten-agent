@@ -20,7 +20,10 @@ logger = logging.getLogger(__name__)
 # Agent 1 – vision + file_search on master category
 # ---------------------------------------------------------------------------
 
-async def run_agent1(images: list[tuple[int, str, str, str]]) -> tuple[dict, list]:
+async def run_agent1(
+    images: list[tuple[int, str, str, str]],
+    bestekpost_filters: list[str] | None = None,
+) -> tuple[dict, list]:
     """Return (parsed_json, file_search_annotations)."""
     client = get_client()
     vs_id = get_vector_store_id()
@@ -37,6 +40,12 @@ async def run_agent1(images: list[tuple[int, str, str, str]]) -> tuple[dict, lis
         "bestekpostnummers terug in het gevraagde JSON-formaat. "
         "Meld uitsluitend het verschil (werk uitgevoerd in deze periode), geen inventaris van de reeds bestaande staat."
     )
+    if bestekpost_filters:
+        joined_filters = ", ".join(bestekpost_filters)
+        text_lines.append(
+            "\nBeperk de output tot bestekpostnummers die binnen deze filters vallen: "
+            f"{joined_filters}. Negeer waargenomen activiteit buiten deze filters."
+        )
     
     content = [{"type": "input_text", "text": "\n".join(text_lines)}]
     
@@ -85,12 +94,16 @@ async def run_agent1(images: list[tuple[int, str, str, str]]) -> tuple[dict, lis
 # Agent 2 – enrichment with detail fragments
 # ---------------------------------------------------------------------------
 
-async def run_agent2(agent1_json: dict) -> dict:
+async def run_agent2(
+    agent1_json: dict,
+    schema: dict | None = None,
+    instructions: str | None = None,
+) -> dict:
     """Enrich Agent 1 mapping with detail fragments → structured report."""
     client = get_client()
     vs_id = get_vector_store_id()
-    instructions = load_prompt("agent2_system.txt")
-    schema = load_schema("agent2.output.json")
+    instructions = instructions or load_prompt("agent2_system.txt")
+    schema = schema or load_schema("agent2.output.json")
 
     user_message = (
         "## Agent 1 analyse\n"
