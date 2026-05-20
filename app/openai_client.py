@@ -8,6 +8,8 @@ from pathlib import Path
 
 from openai import AsyncAzureOpenAI
 
+from app.regions import PROMPT_FILES, VECTOR_STORE_ENV_KEYS, normalize_region
+
 _client: AsyncAzureOpenAI | None = None
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -32,17 +34,34 @@ def get_model() -> str:
     return AZURE_DEPLOYMENT
 
 
-def get_vector_store_id() -> str:
-    vs_id = os.getenv("VECTOR_STORE_ID", "").strip()
+def get_vector_store_id(region: str = "flemish") -> str:
+    region = normalize_region(region)
+    env_key = VECTOR_STORE_ENV_KEYS[region]
+    vs_id = os.getenv(env_key, "").strip()
+
+    if not vs_id and region == "flemish":
+        vs_id = os.getenv("VECTOR_STORE_ID", "").strip()
+
     if not vs_id:
         raise RuntimeError(
-            "VECTOR_STORE_ID is not set. Run `python -m scripts.init_kb` first."
+            f"{env_key} is not set. Run `python -m scripts.init_kb --region {region}` first."
         )
     return vs_id
 
 
+def prompt_filename(agent: str, region: str = "flemish") -> str:
+    region = normalize_region(region)
+    if agent not in ("agent1", "agent2"):
+        raise ValueError(f"Unknown agent '{agent}'")
+    return PROMPT_FILES[region][agent]
+
+
 def load_prompt(name: str) -> str:
     return (PROJECT_ROOT / "prompts" / name).read_text(encoding="utf-8")
+
+
+def load_region_prompt(agent: str, region: str = "flemish") -> str:
+    return load_prompt(prompt_filename(agent, region))
 
 
 def load_schema(name: str) -> dict:

@@ -5,14 +5,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.regions import OUTPUT_STORAGE_LABELS, normalize_region
+
 
 def save_report_output(
     result: dict,
     uploaded_images: list[dict],
     report_fields: list[str],
     bestekpost_filters: list[str],
+    region: str = "flemish",
 ) -> Path:
     """Save markdown, uploaded filenames, and JSON output for one request."""
+    region = normalize_region(region)
+    labels = OUTPUT_STORAGE_LABELS[region]
     outputs_root = Path("outputs")
     output_dir = _create_next_output_dir(outputs_root)
 
@@ -20,16 +25,16 @@ def save_report_output(
     (output_dir / "report.md").write_text(markdown_report, encoding="utf-8")
 
     image_lines = [
-        "Uploaded images used for report generation",
+        labels["uploaded_images_title"],
         "",
     ]
     for image_info in uploaded_images:
-        camera_label = image_info.get("camera_label", "Camera")
-        before_name = image_info.get("before_filename", "(unknown before image)")
-        after_name = image_info.get("after_filename", "(unknown after image)")
+        camera_label = image_info.get("camera_label", labels["camera_fallback"])
+        before_name = image_info.get("before_filename", labels["unknown_before"])
+        after_name = image_info.get("after_filename", labels["unknown_after"])
         image_lines.append(f"{camera_label}:")
-        image_lines.append(f"- before: {before_name}")
-        image_lines.append(f"- after: {after_name}")
+        image_lines.append(f"- {labels['before']}: {before_name}")
+        image_lines.append(f"- {labels['after']}: {after_name}")
         image_lines.append("")
     (output_dir / "uploaded_images.txt").write_text(
         "\n".join(image_lines).rstrip() + "\n",
@@ -37,20 +42,22 @@ def save_report_output(
     )
 
     options_lines = [
-        "Report generation options",
+        labels["options_title"],
         "",
-        "Rapportvelden:",
+        f"{labels['region']}: {region}",
+        "",
+        f"{labels['report_fields']}:",
     ]
     if report_fields:
         options_lines.extend(f"- {field}" for field in report_fields)
     else:
-        options_lines.append("- (none selected)")
+        options_lines.append(f"- {labels['none_selected']}")
 
-    options_lines.extend(["", "Bestekpost filter:"])
+    options_lines.extend(["", f"{labels['bestekpost_filter']}:"])
     if bestekpost_filters:
         options_lines.extend(f"- {filter_value}" for filter_value in bestekpost_filters)
     else:
-        options_lines.append("- (none)")
+        options_lines.append(f"- {labels['none']}")
 
     (output_dir / "request_options.txt").write_text(
         "\n".join(options_lines).rstrip() + "\n",

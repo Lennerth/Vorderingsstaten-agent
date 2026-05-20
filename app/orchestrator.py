@@ -11,7 +11,13 @@ import time
 from app.kb import run_agent1, run_agent2
 from app.logging_utils import RequestLogger
 from app.models import Agent1Output, Agent2Output
-from app.openai_client import load_prompt, load_schema
+from app.openai_client import load_region_prompt, load_schema
+from app.regions import (
+    KB_MESSAGES,
+    LOW_CONFIDENCE_MESSAGE,
+    LOW_CONFIDENCE_WARNING,
+    normalize_region,
+)
 from app.reporting import render_markdown
 from app.utils.image_processing import optimize_and_encode
 
@@ -38,9 +44,12 @@ async def run_pipeline(
     request_id: str,
     bestekpost_filter: list[str] | None = None,
     report_fields: list[str] | None = None,
+    region: str = "flemish",
 ) -> dict:
+    region = normalize_region(region)
     rlog = RequestLogger(request_id)
     t_start = time.time()
+    rlog.log_step("region", {"region": region})
 
     # ── 1. Image optimisation ────────────────────────────────────────────
     logger.info("[%s] Optimizing images for %d cameras …", request_id, len(camera_pairs))
@@ -79,7 +88,9 @@ async def run_pipeline(
     logger.info("[%s] Running Agent 1 …", request_id)
     t1 = time.time()
     parsed_filters = _parse_bestekpost_filters(bestekpost_filter or [])
-    agent1_raw, agent1_annotations = await run_agent1(images, bestekpost_filter)
+    agent1_raw, agent1_annotations = await run_agent1(
+        images, bestekpost_filter, region=region
+    )
     rlog.log_step("agent1_raw_output", {"output": agent1_raw})
 
     try:
@@ -87,7 +98,9 @@ async def run_pipeline(
     except Exception as exc:
         logger.warning("[%s] Agent 1 validation failed (%s), retrying …", request_id, exc)
         rlog.log_step("agent1_retry", {"error": str(exc)})
-        agent1_raw, agent1_annotations = await run_agent1(images, bestekpost_filter)
+        agent1_raw, agent1_annotations = await run_agent1(
+            images, bestekpost_filter, region=region
+        )
         agent1 = Agent1Output.model_validate(agent1_raw)
 
     if parsed_filters:
@@ -128,11 +141,14 @@ async def run_pipeline(
         OPTIONAL_AGENT2_FIELDS if report_fields is None else report_fields
     )
     agent2_schema = _build_agent2_schema(selected_report_fields)
-    agent2_instructions = _build_agent2_instructions(selected_report_fields)
+    agent2_instructions = _build_agent2_instructions(
+        selected_report_fields, region=region
+    )
     agent2_raw = await run_agent2(
         agent1_raw,
         schema=agent2_schema,
         instructions=agent2_instructions,
+        region=region,
     )
     rlog.log_step("agent2_raw_output", {"output": agent2_raw})
 
@@ -145,10 +161,11 @@ async def run_pipeline(
             agent1_raw,
             schema=agent2_schema,
             instructions=agent2_instructions,
+            region=region,
         )
         agent2 = Agent2Output.model_validate(agent2_raw)
 
-    _enforce_low_confidence(agent1, agent2)
+    _enforce_low_confidence(agent1, agent2, region)
     
     # Sort agent2 bestekposten by nummer before rendering
     agent2.bestekposten.sort(key=lambda x: x.nummer)
@@ -159,7 +176,7 @@ async def run_pipeline(
     rlog.add_timing("agent2", time.time() - t3)
 
     # ── 5. Render markdown ───────────────────────────────────────────────
-    markdown = render_markdown(agent2, images)
+    markdown = render_markdown(agent2, images, region=region)
 
     total_time = time.time() - t_start
     rlog.add_timing("total", total_time)
@@ -179,9 +196,10 @@ async def run_pipeline(
 # Helpers
 # ---------------------------------------------------------------------------
 
-_LOW_WARNING = "Manuele check / extra foto nodig"
-
-def _enforce_low_confidence(agent1: Agent1Output, agent2: Agent2Output) -> None:
+def _enforce_low_confidence(
+    agent1: Agent1Output, agent2: Agent2Output, region: str
+) -> None:
+    low_warning = LOW_CONFIDENCE_WARNING[region]
     low_posts = {
         bp.nummer: bp.camera_labels
         for bp in agent1.bestekposten
@@ -195,13 +213,17 @@ def _enforce_low_confidence(agent1: Agent1Output, agent2: Agent2Output) -> None:
         if bp.nummer not in low_posts:
             continue
 
-        if bp.open_punten is not None and _LOW_WARNING.lower() not in " ".join(bp.open_punten).lower():
-            bp.open_punten.append(_LOW_WARNING)
+        if bp.open_punten is not None and low_warning.lower() not in " ".join(bp.open_punten).lower():
+            bp.open_punten.append(low_warning)
 
         cameras_str = ", ".join(low_posts[bp.nummer])
-        warning_msg = f"Bestekpost {bp.nummer} ({cameras_str}): {_LOW_WARNING}"
-        
-        if not any(_LOW_WARNING.lower() in item.lower() and bp.nummer in item for item in agent2.extra_input_nodig):
+        warning_msg = LOW_CONFIDENCE_MESSAGE[region].format(
+            nummer=bp.nummer,
+            cameras=cameras_str,
+            warning=low_warning,
+        )
+
+        if not any(low_warning.lower() in item.lower() and bp.nummer in item for item in agent2.extra_input_nodig):
             agent2.extra_input_nodig.append(warning_msg)
 
 
@@ -301,15 +323,17 @@ def _build_agent2_schema(report_fields: set[str]) -> dict:
     return schema
 
 
-def _build_agent2_instructions(report_fields: set[str]) -> str:
-    base_prompt = load_prompt("agent2_system.txt")
+def _build_agent2_instructions(report_fields: set[str], region: str = "flemish") -> str:
+    region = normalize_region(region)
+    base_prompt = load_region_prompt("agent2", region)
+    msgs = KB_MESSAGES[region]
     active_fields = sorted(ALWAYS_REQUIRED_AGENT2_FIELDS | report_fields)
     inactive_fields = sorted(OPTIONAL_AGENT2_FIELDS - report_fields)
+    inactive_str = ", ".join(inactive_fields) if inactive_fields else (
+        "geen" if region == "flemish" else "aucun"
+    )
     return (
         f"{base_prompt}\n\n"
-        "## Actieve velden\n"
-        "Vul uitsluitend velden in die in het actieve JSON-schema staan.\n"
-        f"Actieve bestekpostvelden: {', '.join(active_fields)}.\n"
-        f"Niet-actieve optionele velden: {', '.join(inactive_fields) if inactive_fields else 'geen'}.\n"
-        "Als een optioneel veld niet actief is, vermeld de informatie voor dat veld nergens anders."
+        f"{msgs['agent2_active_fields_header']}\n"
+        f"{msgs['agent2_active_fields_body'].format(active=', '.join(active_fields), inactive=inactive_str)}"
     )

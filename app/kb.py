@@ -9,9 +9,10 @@ from app.openai_client import (
     get_client,
     get_model,
     get_vector_store_id,
-    load_prompt,
+    load_region_prompt,
     load_schema,
 )
+from app.regions import KB_MESSAGES, normalize_region
 
 logger = logging.getLogger(__name__)
 
@@ -23,33 +24,31 @@ logger = logging.getLogger(__name__)
 async def run_agent1(
     images: list[tuple[int, str, str, str]],
     bestekpost_filters: list[str] | None = None,
+    region: str = "flemish",
 ) -> tuple[dict, list]:
     """Return (parsed_json, file_search_annotations)."""
+    region = normalize_region(region)
     client = get_client()
-    vs_id = get_vector_store_id()
-    instructions = load_prompt("agent1_system.txt")
+    vs_id = get_vector_store_id(region)
+    instructions = load_region_prompt("agent1", region)
     schema = load_schema("agent1.bestekpostmapping.json")
+    msgs = KB_MESSAGES[region]
+    roles = msgs["roles"]
 
-    # Build input texts
     text_lines = []
     for idx, camera_label, role, _ in images:
-        text_lines.append(f"Foto {idx} = {camera_label} {role}")
-    
-    text_lines.append(
-        "\nAnalyseer de overgang van 'voor' naar 'na' voor elke camera en geef de "
-        "bestekpostnummers terug in het gevraagde JSON-formaat. "
-        "Meld uitsluitend het verschil (werk uitgevoerd in deze periode), geen inventaris van de reeds bestaande staat."
-    )
+        role_label = roles.get(role, role)
+        text_lines.append(
+            msgs["photo_line"].format(idx=idx, camera=camera_label, role=role_label)
+        )
+
+    text_lines.append(msgs["analysis_instruction"])
     if bestekpost_filters:
         joined_filters = ", ".join(bestekpost_filters)
-        text_lines.append(
-            "\nBeperk de output tot bestekpostnummers die binnen deze filters vallen: "
-            f"{joined_filters}. Negeer waargenomen activiteit buiten deze filters."
-        )
-    
+        text_lines.append(msgs["filter_prefix"].format(filters=joined_filters))
+
     content = [{"type": "input_text", "text": "\n".join(text_lines)}]
-    
-    # Append images
+
     for _, _, _, data_url in images:
         content.append({"type": "input_image", "image_url": data_url})
 
@@ -81,12 +80,12 @@ async def run_agent1(
 
     raw_text = _extract_text(response)
     annotations = _extract_file_search_annotations(response)
-    
+
     try:
         parsed = json.loads(raw_text)
     except json.JSONDecodeError:
         parsed = {}
-        
+
     return parsed, annotations
 
 
@@ -98,19 +97,19 @@ async def run_agent2(
     agent1_json: dict,
     schema: dict | None = None,
     instructions: str | None = None,
+    region: str = "flemish",
 ) -> dict:
     """Enrich Agent 1 mapping with detail fragments → structured report."""
+    region = normalize_region(region)
     client = get_client()
-    vs_id = get_vector_store_id()
-    instructions = instructions or load_prompt("agent2_system.txt")
+    vs_id = get_vector_store_id(region)
+    instructions = instructions or load_region_prompt("agent2", region)
     schema = schema or load_schema("agent2.output.json")
+    msgs = KB_MESSAGES[region]
 
     user_message = (
-        "## Agent 1 analyse\n"
-        "Hier zijn de gedetecteerde bestekposten. "
-        "Zoek voor ELK nummer de details op in de knowledge base (gebruik file_search).\n"
-        "Focus op bestanden die beginnen met 'Deel-X...' waar X overeenkomt met de eerste cijfers van het bestekpostnummer.\n\n"
-        "```json\n"
+        msgs["agent2_intro"]
+        + "```json\n"
         + json.dumps(agent1_json, indent=2, ensure_ascii=False)
         + "\n```\n"
     )
@@ -146,7 +145,7 @@ async def run_agent2(
         parsed = json.loads(raw_text)
     except json.JSONDecodeError:
         parsed = {}
-        
+
     return parsed
 
 

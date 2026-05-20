@@ -31,49 +31,56 @@
 </head>
 <body>
 
-<h1>Vorderingsstaat Generator</h1>
+<h1 data-i18n="pageTitle">Vorderingsstaat Generator</h1>
 
 <div class="container">
     <div class="upload-section">
-        <h3>Upload Foto's</h3>
+        <h3 data-i18n="uploadTitle">Upload Foto's</h3>
         <form id="uploadForm">
+            <label for="regionSelect"><strong data-i18n="regionLabel">Regio / Région:</strong></label>
+            <select id="regionSelect" class="form-control">
+                <option value="flemish">Vlaams (bestek)</option>
+                <option value="walloon">Wallon (CCTB)</option>
+            </select>
+            <br><br>
             <div id="camera-blocks"></div>
-            <button type="button" id="addCameraBtn" class="secondary">+ Camera toevoegen</button>
+            <button type="button" id="addCameraBtn" class="secondary" data-i18n="addCamera">+ Camera toevoegen</button>
             <br><br>
             <div class="options-section">
-                <label for="bestekpostFilter"><strong>Bestekpost filter (optioneel):</strong></label>
+                <label for="bestekpostFilter"><strong data-i18n="bestekpostFilter">Bestekpost filter (optioneel):</strong></label>
                 <input
                     type="text"
                     id="bestekpostFilter"
                     class="form-control"
                     placeholder="01-03, 05.82-05.89, 10.20"
+                    data-i18n-placeholder="filterPlaceholder"
                 >
 
-                <p><strong>Rapportvelden:</strong></p>
+                <p><strong data-i18n="reportFields">Rapportvelden:</strong></p>
                 <div class="checkbox-list">
-                    <label><input type="checkbox" class="report-field" value="zichtbaar_uitgevoerd" checked> Uitgevoerd in deze periode</label>
-                    <label><input type="checkbox" class="report-field" value="bestekeisen" checked> Bestekeisen</label>
-                    <label><input type="checkbox" class="report-field" value="bron" checked> Bron detailbestek</label>
-                    <label><input type="checkbox" class="report-field" value="image_indices" checked> Foto indices</label>
-                    <label><input type="checkbox" class="report-field" value="camera_labels" checked> Camera labels</label>
-                    <label><input type="checkbox" class="report-field" value="open_punten" checked> Open punten / risico's</label>
-                    <label><input type="checkbox" class="report-field" value="volgende_stap" checked> Volgende stap</label>
+                    <label><input type="checkbox" class="report-field" value="zichtbaar_uitgevoerd" checked> <span data-i18n="fieldExecuted">Uitgevoerd in deze periode</span></label>
+                    <label><input type="checkbox" class="report-field" value="bestekeisen" checked> <span data-i18n="fieldRequirements">Bestekeisen</span></label>
+                    <label><input type="checkbox" class="report-field" value="bron" checked> <span data-i18n="fieldSource">Bron detailbestek</span></label>
+                    <label><input type="checkbox" class="report-field" value="image_indices" checked> <span data-i18n="fieldPhotoIndices">Foto indices</span></label>
+                    <label><input type="checkbox" class="report-field" value="camera_labels" checked> <span data-i18n="fieldCameraLabels">Camera labels</span></label>
+                    <label><input type="checkbox" class="report-field" value="open_punten" checked> <span data-i18n="fieldOpenPoints">Open punten / risico's</span></label>
+                    <label><input type="checkbox" class="report-field" value="volgende_stap" checked> <span data-i18n="fieldNextStep">Volgende stap</span></label>
                 </div>
             </div>
             <br>
-            <button type="submit" id="submitBtn" style="width: 100%; font-size: 18px; padding: 15px;">Genereer Rapport</button>
+            <button type="submit" id="submitBtn" style="width: 100%; font-size: 18px; padding: 15px;" data-i18n="submit">Genereer Rapport</button>
         </form>
         <div id="status"></div>
     </div>
 
     <div class="preview-section">
         <div class="tabs">
-            <span class="tab active" onclick="switchTab('report')">Rapport (Markdown)</span>
-            <span class="tab" onclick="switchTab('json')">JSON Data</span>
+            <span class="tab active" onclick="switchTab('report')" data-i18n="reportTab">Rapport (Markdown)</span>
+            <span class="tab" onclick="switchTab('json')" data-i18n="jsonTab">JSON Data</span>
         </div>
         
         <div id="report-view">
-            <div id="markdown-render"><em>Het resultaat verschijnt hier...</em></div>
+            <div id="markdown-render" data-state="empty"><em data-i18n="emptyResult">Het resultaat verschijnt hier...</em></div>
         </div>
         
         <div id="json-view" style="display:none;">
@@ -85,14 +92,14 @@
 <template id="camera-block-template">
     <div class="camera-block">
         <div class="camera-header">
-            <input type="text" class="camera-label-input" placeholder="Label (bijv. Camera 1)" required>
-            <button type="button" class="danger remove-camera-btn">Verwijder</button>
+            <input type="text" class="camera-label-input" placeholder="Label (bijv. Camera 1)" data-i18n-placeholder="cameraPlaceholder" required>
+            <button type="button" class="danger remove-camera-btn" data-i18n="removeCamera">Verwijder</button>
         </div>
-        <label><strong>Foto Voor (Eerder):</strong></label><br>
+        <label><strong data-i18n="beforePhoto">Foto Voor (Eerder):</strong></label><br>
         <input type="file" class="before-file" accept="image/*" required><br>
         <img class="preview before-preview"><br><br>
 
-        <label><strong>Foto Na (Later):</strong></label><br>
+        <label><strong data-i18n="afterPhoto">Foto Na (Later):</strong></label><br>
         <input type="file" class="after-file" accept="image/*" required><br>
         <img class="preview after-preview">
     </div>
@@ -100,7 +107,97 @@
 
 <script>
     const MAX_PAIRS = 6;
+    const UI_TEXT = {
+        flemish: {
+            pageTitle: 'Vorderingsstaat Generator',
+            uploadTitle: "Upload Foto's",
+            regionLabel: 'Regio / Région:',
+            addCamera: '+ Camera toevoegen',
+            bestekpostFilter: 'Bestekpost filter (optioneel):',
+            filterPlaceholder: '01-03, 05.82-05.89, 10.20',
+            reportFields: 'Rapportvelden:',
+            fieldExecuted: 'Uitgevoerd in deze periode',
+            fieldRequirements: 'Bestekeisen',
+            fieldSource: 'Bron detailbestek',
+            fieldPhotoIndices: 'Foto indices',
+            fieldCameraLabels: 'Camera labels',
+            fieldOpenPoints: "Open punten / risico's",
+            fieldNextStep: 'Volgende stap',
+            submit: 'Genereer Rapport',
+            reportTab: 'Rapport (Markdown)',
+            jsonTab: 'JSON Data',
+            emptyResult: 'Het resultaat verschijnt hier...',
+            cameraPlaceholder: 'Label (bijv. Camera 1)',
+            cameraDefault: 'Camera',
+            removeCamera: 'Verwijder',
+            beforePhoto: 'Foto Voor (Eerder):',
+            afterPhoto: 'Foto Na (Later):',
+            maxCameras: (max) => `Maximaal ${max} camera's toegestaan.`,
+            missingPhotos: (label) => `Upload beide foto's voor ${label}!`,
+            processing: (min, max) => `Bezig met verwerken... (dit kan ${min}-${max} sec duren)`,
+            loading: 'Laden...',
+            done: 'Klaar!',
+            errorPrefix: 'Fout: ',
+            genericError: 'Er is een fout opgetreden.',
+        },
+        walloon: {
+            pageTitle: "Générateur d'état d'avancement",
+            uploadTitle: 'Télécharger les photos',
+            regionLabel: 'Région:',
+            addCamera: '+ Ajouter une caméra',
+            bestekpostFilter: 'Filtre poste CCTB (optionnel):',
+            filterPlaceholder: 'T1.11-T1.19, T2.21, T6',
+            reportFields: 'Champs du rapport:',
+            fieldExecuted: 'Réalisé sur la période',
+            fieldRequirements: 'Exigences CCTB',
+            fieldSource: 'Source CCTB détaillée',
+            fieldPhotoIndices: 'Indices des photos',
+            fieldCameraLabels: 'Libellés caméra',
+            fieldOpenPoints: 'Points ouverts / risques',
+            fieldNextStep: 'Prochaine étape',
+            submit: 'Générer le rapport',
+            reportTab: 'Rapport (Markdown)',
+            jsonTab: 'Données JSON',
+            emptyResult: 'Le résultat apparaîtra ici...',
+            cameraPlaceholder: 'Libellé (p. ex. Caméra 1)',
+            cameraDefault: 'Caméra',
+            removeCamera: 'Supprimer',
+            beforePhoto: 'Photo avant:',
+            afterPhoto: 'Photo après:',
+            maxCameras: (max) => `${max} caméras maximum autorisées.`,
+            missingPhotos: (label) => `Téléchargez les deux photos pour ${label} !`,
+            processing: (min, max) => `Traitement en cours... (cela peut prendre ${min}-${max} sec)`,
+            loading: 'Chargement...',
+            done: 'Terminé !',
+            errorPrefix: 'Erreur : ',
+            genericError: "Une erreur s'est produite.",
+        },
+    };
+
     let cameraCount = 0;
+
+    function currentRegion() {
+        return document.getElementById('regionSelect').value || 'flemish';
+    }
+
+    function t(key, region = currentRegion()) {
+        return UI_TEXT[region][key] || UI_TEXT.flemish[key] || key;
+    }
+
+    function applyLanguage(region = currentRegion(), root = document) {
+        document.documentElement.lang = region === 'walloon' ? 'fr' : 'nl';
+        document.title = t('pageTitle', region);
+
+        root.querySelectorAll('[data-i18n]').forEach(element => {
+            const key = element.dataset.i18n;
+            element.textContent = t(key, region);
+        });
+
+        root.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
+            const key = element.dataset.i18nPlaceholder;
+            element.placeholder = t(key, region);
+        });
+    }
 
     function setupPreview(inputElement, imgElement) {
         inputElement.addEventListener('change', () => {
@@ -122,9 +219,10 @@
     function addCameraBlock() {
         const blocksContainer = document.getElementById('camera-blocks');
         const currentBlocks = blocksContainer.querySelectorAll('.camera-block').length;
+        const region = currentRegion();
         
         if (currentBlocks >= MAX_PAIRS) {
-            alert(`Maximaal ${MAX_PAIRS} camera's toegestaan.`);
+            alert(t('maxCameras', region)(MAX_PAIRS));
             return;
         }
 
@@ -134,7 +232,11 @@
         const block = clone.querySelector('.camera-block');
         
         const labelInput = block.querySelector('.camera-label-input');
-        labelInput.value = `Camera ${cameraCount}`;
+        labelInput.value = `${t('cameraDefault', region)} ${cameraCount}`;
+        labelInput.dataset.autoLabel = 'true';
+        labelInput.addEventListener('input', () => {
+            delete labelInput.dataset.autoLabel;
+        });
 
         setupPreview(block.querySelector('.before-file'), block.querySelector('.before-preview'));
         setupPreview(block.querySelector('.after-file'), block.querySelector('.after-preview'));
@@ -149,6 +251,7 @@
         });
 
         blocksContainer.appendChild(block);
+        applyLanguage(region, block);
         updateRemoveButtons();
         updateAddButton();
     }
@@ -180,19 +283,32 @@
         }
     }
 
+    function updateAutoCameraLabels(region = currentRegion()) {
+        document.querySelectorAll('.camera-label-input[data-auto-label="true"]').forEach((input, index) => {
+            input.value = `${t('cameraDefault', region)} ${index + 1}`;
+        });
+    }
+
     // Initialize first block
     addCameraBlock();
+    applyLanguage();
 
     document.getElementById('addCameraBtn').addEventListener('click', addCameraBlock);
+    document.getElementById('regionSelect').addEventListener('change', () => {
+        const region = currentRegion();
+        applyLanguage(region);
+        updateAutoCameraLabels(region);
+    });
 
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const blocks = document.querySelectorAll('.camera-block');
         if (blocks.length === 0) return;
+        const region = currentRegion();
         
         if (blocks.length > MAX_PAIRS) {
-            alert(`Maximaal ${MAX_PAIRS} camera's toegestaan.`);
+            alert(t('maxCameras', region)(MAX_PAIRS));
             return;
         }
 
@@ -203,10 +319,10 @@
             const block = blocks[i];
             const beforeFile = block.querySelector('.before-file').files[0];
             const afterFile = block.querySelector('.after-file').files[0];
-            const label = block.querySelector('.camera-label-input').value.trim() || `Camera ${i + 1}`;
+            const label = block.querySelector('.camera-label-input').value.trim() || `${t('cameraDefault', region)} ${i + 1}`;
             
             if (!beforeFile || !afterFile) {
-                alert(`Upload beide foto's voor ${label}!`);
+                alert(t('missingPhotos', region)(label));
                 return;
             }
             
@@ -216,6 +332,7 @@
         }
 
         formData.append('camera_labels', JSON.stringify(cameraLabels));
+        formData.append('region', region);
         const bestekpostFilter = document.getElementById('bestekpostFilter').value.trim();
         if (bestekpostFilter) {
             formData.append('bestekpost_filter', bestekpostFilter);
@@ -235,8 +352,9 @@
         // Disable remove buttons during upload
         document.querySelectorAll('.remove-camera-btn').forEach(btn => btn.disabled = true);
         
-        statusDiv.textContent = `Bezig met verwerken... (dit kan ${blocks.length * 30}-${blocks.length * 60} sec duren)`;
-        document.getElementById('markdown-render').innerHTML = '<div class="spinner">Laden...</div>';
+        statusDiv.textContent = t('processing', region)(blocks.length * 30, blocks.length * 60);
+        document.getElementById('markdown-render').dataset.state = 'loading';
+        document.getElementById('markdown-render').innerHTML = `<div class="spinner">${t('loading', region)}</div>`;
 
         try {
             const response = await fetch('/progress-report', {
@@ -252,16 +370,18 @@
             const data = await response.json();
             
             // Render markdown
+            document.getElementById('markdown-render').dataset.state = 'result';
             document.getElementById('markdown-render').innerHTML = marked.parse(data.markdown_report);
             
             // Show JSON
             document.getElementById('json-content').textContent = JSON.stringify(data, null, 2);
             
-            statusDiv.textContent = "Klaar!";
+            statusDiv.textContent = t('done', region);
         } catch (error) {
             console.error(error);
-            statusDiv.textContent = "Fout: " + error.message;
-            document.getElementById('markdown-render').innerHTML = '<span style="color:red">Er is een fout opgetreden.</span>';
+            statusDiv.textContent = t('errorPrefix', region) + error.message;
+            document.getElementById('markdown-render').dataset.state = 'error';
+            document.getElementById('markdown-render').innerHTML = `<span style="color:red">${t('genericError', region)}</span>`;
         } finally {
             submitBtn.disabled = false;
             updateAddButton();

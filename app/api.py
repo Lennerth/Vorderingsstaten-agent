@@ -10,6 +10,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from app.logging_utils import generate_request_id
 from app.output_storage import save_report_output
 from app.orchestrator import InvalidBestekpostFilter, run_pipeline
+from app.regions import normalize_region
 from app.utils.system_monitor import check_resources
 
 logger = logging.getLogger(__name__)
@@ -37,14 +38,21 @@ async def progress_report(
     camera_labels: str = Form("[]"),
     bestekpost_filter: str = Form(""),
     report_fields: str = Form(""),
+    region: str = Form("flemish"),
 ):
     request_id = generate_request_id()
+
+    try:
+        region = normalize_region(region)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     
     n_pairs = len(before_images)
     logger.info(
-        "[%s] Incoming request: %d pairs",
+        "[%s] Incoming request: %d pairs, region=%s",
         request_id,
         n_pairs,
+        region,
     )
 
     if n_pairs != len(after_images):
@@ -145,6 +153,7 @@ async def progress_report(
             request_id,
             bestekpost_filter=bestekpost_filters,
             report_fields=selected_report_fields,
+            region=region,
         )
     except InvalidBestekpostFilter as exc:
         raise HTTPException(400, str(exc))
@@ -158,6 +167,7 @@ async def progress_report(
             uploaded_image_names,
             report_fields=selected_report_fields,
             bestekpost_filters=bestekpost_filters or [],
+            region=region,
         )
         logger.info("[%s] Output artifacts saved to %s", request_id, output_dir)
     except Exception:

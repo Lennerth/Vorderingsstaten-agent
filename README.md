@@ -148,8 +148,12 @@ from a `.env` file at the project root via `python-dotenv`.
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `AZURE_OPENAI_API_KEY` | yes | – | API key for the Azure OpenAI resource that hosts the vision-capable deployment and the vector store. |
-| `VECTOR_STORE_ID` | yes | – | ID of the Azure OpenAI vector store that contains the specification. Populated automatically by `scripts.init_kb` on first run. |
+| `VECTOR_STORE_ID_FLEMISH` | yes* | – | Vector store for the Flemish bestek. Set by `python -m scripts.init_kb --region flemish`. |
+| `VECTOR_STORE_ID_WALLOON` | yes* | – | Vector store for the Walloon CCTB. Set by `python -m scripts.init_kb --region walloon`. |
+| `VECTOR_STORE_ID` | no | – | Legacy fallback: used as `VECTOR_STORE_ID_FLEMISH` if the Flemish key is empty. |
 | `LOG_DIR` | no | `logs` | Directory into which the per-request JSONL trace files are written. |
+
+\* At least the store for the region you use must be set.
 
 The Azure endpoint, the model deployment name (`gpt-5.2`), and the API
 version are currently hardcoded in [`app/openai_client.py`](app/openai_client.py)
@@ -171,6 +175,7 @@ rendered Markdown report and the underlying JSON.
 | `before_images` | repeated file | One *before* photo per camera, in camera order. Required, minimum 1. |
 | `after_images` | repeated file | One *after* photo per camera, in the same order as `before_images`. Required, length must match. |
 | `camera_labels` | string | A JSON-encoded array of camera labels, one per pair, in the same order (for example `["Living", "Keuken"]`). If missing or invalid, the server falls back to `["Camera 1", "Camera 2", …]`. |
+| `region` | string | `flemish` (default) or `walloon`. Selects vector store, prompts, and report language. |
 
 The pairs must be aligned by position: `before_images[i]` and
 `after_images[i]` are treated as the *voor* and *na* photos of
@@ -399,11 +404,44 @@ The trace files are plain JSON Lines: one JSON object per line, safe to
 `cat`, `tail -f`, or ingest into any log aggregator that understands
 JSONL.
 
+## Region support (Flemish vs Walloon)
+
+The built-in uploader and `POST /progress-report` accept a `region` form
+field (`flemish` or `walloon`, default `flemish`):
+
+| Region | Specification | Master index | Detail documents |
+| --- | --- | --- | --- |
+| `flemish` | Bouwtechnisch bestek (Vlaams) | `Master-inhoudstafel.txt` | `Deel-0` … `Deel-9` .docx |
+| `walloon` | CCTB 01.13 (Wallon) | `Master-CCTB.txt` | `CCTB_01.13_docx/*.docx` |
+
+Each region uses its **own Azure vector store** (`VECTOR_STORE_ID_FLEMISH`
+and `VECTOR_STORE_ID_WALLOON`). Agent prompts and the rendered Markdown
+report are in Dutch for Flemish and in French for Walloon.
+
+### Walloon setup (one-time)
+
+```bash
+# 1. Generate the master index from the CCTB Word files
+python -m scripts.build_walloon_master
+
+# 2. Upload master + detail files to a new vector store
+python -m scripts.init_kb --region walloon
+```
+
+Flemish setup is unchanged:
+
+```bash
+python -m scripts.init_kb --region flemish
+```
+
+If your `.env` still has the legacy `VECTOR_STORE_ID` only, it is treated
+as `VECTOR_STORE_ID_FLEMISH` until you migrate.
+
 ## Knowledge base setup
 
-Before you can run the service, the Azure OpenAI vector store referenced
-by `VECTOR_STORE_ID` must contain the specification files. The bundled
-[`scripts/init_kb.py`](scripts/init_kb.py) uploads:
+Before you can run the service, the Azure OpenAI vector store for your
+chosen region must contain the specification files. The bundled
+[`scripts/init_kb.py`](scripts/init_kb.py) uploads (per `--region`):
 
 - `Master-inhoudstafel.txt` — a plain-text list of all
   *bestekpostnummers*, used by Agent 1 for its initial mapping search.
@@ -420,9 +458,9 @@ the resulting vector-store ID back into `.env` on success.
 
 ## Troubleshooting
 
-- **"VECTOR_STORE_ID is not set" on startup.** Run
-  `python -m scripts.init_kb` first. The script populates the variable
-  in `.env` automatically.
+- **"VECTOR_STORE_ID_FLEMISH is not set" (or Walloon equivalent).** Run
+  `python -m scripts.init_kb --region flemish` or `--region walloon`.
+  For Walloon, run `python -m scripts.build_walloon_master` first.
 - **HTTP 503 on every request.** Check `/health`. If `ram_percent_free`
   is below 10 or `cpu_percent` is above 90, close other programs or
   relax the thresholds in `app/utils/system_monitor.py`.
