@@ -88,9 +88,11 @@ async def run_pipeline(
     logger.info("[%s] Running Agent 1 …", request_id)
     t1 = time.time()
     parsed_filters = _parse_bestekpost_filters(bestekpost_filter or [])
-    agent1_raw, agent1_annotations = await run_agent1(
+    agent1_raw, agent1_annotations, agent1_meta = await run_agent1(
         images, bestekpost_filter, region=region
     )
+    rlog.log_step("agent1_usage", agent1_meta)
+    rlog.add_tokens(agent1_meta)
     rlog.log_step("agent1_raw_output", {"output": agent1_raw})
 
     try:
@@ -98,9 +100,11 @@ async def run_pipeline(
     except Exception as exc:
         logger.warning("[%s] Agent 1 validation failed (%s), retrying …", request_id, exc)
         rlog.log_step("agent1_retry", {"error": str(exc)})
-        agent1_raw, agent1_annotations = await run_agent1(
+        agent1_raw, agent1_annotations, agent1_meta = await run_agent1(
             images, bestekpost_filter, region=region
         )
+        rlog.log_step("agent1_retry_usage", agent1_meta)
+        rlog.add_tokens(agent1_meta)
         agent1 = Agent1Output.model_validate(agent1_raw)
 
     if parsed_filters:
@@ -144,12 +148,14 @@ async def run_pipeline(
     agent2_instructions = _build_agent2_instructions(
         selected_report_fields, region=region
     )
-    agent2_raw = await run_agent2(
+    agent2_raw, agent2_meta = await run_agent2(
         agent1_raw,
         schema=agent2_schema,
         instructions=agent2_instructions,
         region=region,
     )
+    rlog.log_step("agent2_usage", agent2_meta)
+    rlog.add_tokens(agent2_meta)
     rlog.log_step("agent2_raw_output", {"output": agent2_raw})
 
     try:
@@ -157,12 +163,14 @@ async def run_pipeline(
     except Exception as exc:
         logger.warning("[%s] Agent 2 validation failed (%s), retrying …", request_id, exc)
         rlog.log_step("agent2_retry", {"error": str(exc)})
-        agent2_raw = await run_agent2(
+        agent2_raw, agent2_meta = await run_agent2(
             agent1_raw,
             schema=agent2_schema,
             instructions=agent2_instructions,
             region=region,
         )
+        rlog.log_step("agent2_retry_usage", agent2_meta)
+        rlog.add_tokens(agent2_meta)
         agent2 = Agent2Output.model_validate(agent2_raw)
 
     _enforce_low_confidence(agent1, agent2, region)

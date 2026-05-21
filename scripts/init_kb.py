@@ -33,8 +33,19 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BESTEK_DIR = PROJECT_ROOT / "BouwtechnischBestekWoningbouw_20151222_ytdo1q"
 CCTB_DIR = PROJECT_ROOT / "CCTB_01.13_docx"
 ENV_PATH = PROJECT_ROOT / ".env"
-AZURE_ENDPOINT = "https://aidalh.cognitiveservices.azure.com/"
-AZURE_API_VERSION = "2025-03-01-preview"
+
+_DEFAULT_ENDPOINT = "https://aidalh.cognitiveservices.azure.com/"
+_DEFAULT_INIT_KB_API_VERSION = "2025-04-01-preview"
+
+
+def _azure_endpoint() -> str:
+    return os.getenv("AZURE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT).strip()
+
+
+def _init_kb_api_version() -> str:
+    return os.getenv(
+        "AZURE_OPENAI_INIT_KB_API_VERSION", _DEFAULT_INIT_KB_API_VERSION
+    ).strip()
 
 REGION_ENV_KEYS = {
     "flemish": "VECTOR_STORE_ID_FLEMISH",
@@ -168,9 +179,9 @@ def main() -> None:
 
     load_dotenv(ENV_PATH)
     client = AzureOpenAI(
-        azure_endpoint=AZURE_ENDPOINT,
+        azure_endpoint=_azure_endpoint(),
         api_key=os.environ["AZURE_OPENAI_API_KEY"],
-        api_version=AZURE_API_VERSION,
+        api_version=_init_kb_api_version(),
     )
 
     vs_id = os.getenv(env_key, "").strip()

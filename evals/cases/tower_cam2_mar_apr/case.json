@@ -1,0 +1,24 @@
+{
+  "description": "Tower site, cam2, Mar -> Apr (single camera)",
+  "camera_labels": ["Toren cam2"],
+  "pairs": [
+    {
+      "before": "Data AI toren/cam2_2026-03-31_07-00-04.jpeg",
+      "after": "Data AI toren/cam2_2026-04-23_07-00-03.jpeg"
+    }
+  ],
+  "bestekpost_filter": null,
+  "report_fields": null,
+  "expected": {
+    "flemish": {
+      "required_prefixes": ["02"],
+      "forbidden_prefixes": [],
+      "required_keywords": ["werf", "graaf"]
+    },
+    "walloon": {
+      "required_prefixes": ["T0.04"],
+      "forbidden_prefixes": [],
+      "required_keywords": ["chantier", "pelleteuse"]
+    }
+  }
+}

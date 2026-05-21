@@ -25,8 +25,9 @@ entry. The goal is to accelerate reporting without compromising accuracy.
 8. [Prompt design and agent responsibilities](#prompt-design-and-agent-responsibilities)
 9. [Limits and resource guardrails](#limits-and-resource-guardrails)
 10. [Logging](#logging)
-11. [Knowledge base setup](#knowledge-base-setup)
-12. [Troubleshooting](#troubleshooting)
+11. [Evaluation harness](#evaluation-harness)
+12. [Knowledge base setup](#knowledge-base-setup)
+13. [Troubleshooting](#troubleshooting)
 
 ## What the app does
 
@@ -148,17 +149,16 @@ from a `.env` file at the project root via `python-dotenv`.
 | Variable | Required | Default | Description |
 | --- | --- | --- | --- |
 | `AZURE_OPENAI_API_KEY` | yes | – | API key for the Azure OpenAI resource that hosts the vision-capable deployment and the vector store. |
+| `AZURE_OPENAI_ENDPOINT` | no | `https://aidalh.cognitiveservices.azure.com/` | Azure OpenAI resource endpoint (runtime and `init_kb`). |
+| `AZURE_OPENAI_DEPLOYMENT` | no | `gpt-5.4` | Deployment name passed as the `model` parameter in API calls. |
+| `AZURE_OPENAI_API_VERSION` | no | `2025-04-01-preview` | API version for the runtime pipeline (`app/openai_client.py`). |
+| `AZURE_OPENAI_INIT_KB_API_VERSION` | no | `2025-04-01-preview` | API version for vector-store uploads (`scripts/init_kb.py`). Independent from the runtime key so upload and inference can be pinned separately; normally keep both identical. |
 | `VECTOR_STORE_ID_FLEMISH` | yes* | – | Vector store for the Flemish bestek. Set by `python -m scripts.init_kb --region flemish`. |
 | `VECTOR_STORE_ID_WALLOON` | yes* | – | Vector store for the Walloon CCTB. Set by `python -m scripts.init_kb --region walloon`. |
 | `VECTOR_STORE_ID` | no | – | Legacy fallback: used as `VECTOR_STORE_ID_FLEMISH` if the Flemish key is empty. |
 | `LOG_DIR` | no | `logs` | Directory into which the per-request JSONL trace files are written. |
 
 \* At least the store for the region you use must be set.
-
-The Azure endpoint, the model deployment name (`gpt-5.2`), and the API
-version are currently hardcoded in [`app/openai_client.py`](app/openai_client.py)
-and [`scripts/init_kb.py`](scripts/init_kb.py). Externalising them to env
-variables is on the backlog but has not been done in this release.
 
 ## HTTP endpoints
 
@@ -286,6 +286,10 @@ schemas/
   agent2.output.json              Strict JSON schema for Agent 2 output.
 scripts/
   init_kb.py           One-time vector-store upload of master + detail files.
+  run_evals.py         Evaluation harness (regression cases, structured assertions).
+evals/
+  cases/               Per-scenario case.json + image path references.
+  results/             Eval run output (gitignored).
 static/
   index.html           Browser uploader (camera blocks, previews, results tabs).
 logs/                  JSONL request logs (auto-created, gitignored).
@@ -398,11 +402,43 @@ Every request writes a JSONL trace to `logs/<YYYY-MM-DD>.jsonl`
 - `agent1_retry` (only when a retry occurred) with the validation error,
 - `agent2_raw_output` with the raw JSON returned by Agent 2,
 - `agent2_retry` (only when a retry occurred) with the validation error,
-- a final `summary` entry with the elapsed time per step and the total.
+- `agent1_usage` / `agent1_retry_usage` and `agent2_usage` / `agent2_retry_usage` with per-call latency and token counts (`input_tokens`, `output_tokens`, `total_tokens`, `reasoning_tokens`, plus a best-effort `raw_usage` dump),
+- a final `summary` entry with elapsed time per step, aggregated `tokens` totals, and the overall request duration.
 
 The trace files are plain JSON Lines: one JSON object per line, safe to
 `cat`, `tail -f`, or ingest into any log aggregator that understands
 JSONL.
+
+## Evaluation harness
+
+A small regression suite lives under `evals/cases/`. Each case is a
+`case.json` that references before/after images (by default under
+`Data AI toren/`) and defines **region-specific** expected outcomes:
+required bestekpost/CCTB prefixes, forbidden prefixes, and keyword
+substrings in observations. The same images are used for both Flemish
+and Walloon runs; only the expectations differ.
+
+**Prerequisite:** the image paths referenced in the case files must
+exist on disk. On a fresh checkout without `Data AI toren/`, pre-flight
+checks fail with an explicit message rather than an opaque error.
+
+```bash
+# List cases without calling the model
+python -m scripts.run_evals --list-cases
+
+# Validate case files and image paths only
+python -m scripts.run_evals --region both --dry-run
+
+# Full run (calls Azure — costs tokens)
+python -m scripts.run_evals --region both
+
+# Quick smoke: one (case, region) invocation
+python -m scripts.run_evals --region flemish --case tower_cam1_jan_feb --limit 1
+```
+
+Results are written to `evals/results/<timestamp>__<region>.json` and
+`.md`. Each case records its `request_id` so failures can be traced in
+`logs/<date>.jsonl`. Exit code is `1` if any case fails.
 
 ## Region support (Flemish vs Walloon)
 

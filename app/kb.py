@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 
 from app.openai_client import (
     get_client,
@@ -17,6 +18,25 @@ from app.regions import KB_MESSAGES, normalize_region
 logger = logging.getLogger(__name__)
 
 
+def _extract_usage_meta(response, t0: float) -> dict:
+    usage = getattr(response, "usage", None)
+    details = getattr(usage, "output_tokens_details", None) if usage is not None else None
+    raw = None
+    if usage is not None:
+        try:
+            raw = usage.model_dump() if hasattr(usage, "model_dump") else dict(usage)
+        except Exception:
+            raw = None
+    return {
+        "latency_s": round(time.perf_counter() - t0, 3),
+        "input_tokens": getattr(usage, "input_tokens", None),
+        "output_tokens": getattr(usage, "output_tokens", None),
+        "total_tokens": getattr(usage, "total_tokens", None),
+        "reasoning_tokens": getattr(details, "reasoning_tokens", None),
+        "raw_usage": raw,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Agent 1 – vision + file_search on master category
 # ---------------------------------------------------------------------------
@@ -25,8 +45,8 @@ async def run_agent1(
     images: list[tuple[int, str, str, str]],
     bestekpost_filters: list[str] | None = None,
     region: str = "flemish",
-) -> tuple[dict, list]:
-    """Return (parsed_json, file_search_annotations)."""
+) -> tuple[dict, list, dict]:
+    """Return (parsed_json, file_search_annotations, usage_meta)."""
     region = normalize_region(region)
     client = get_client()
     vs_id = get_vector_store_id(region)
@@ -52,6 +72,7 @@ async def run_agent1(
     for _, _, _, data_url in images:
         content.append({"type": "input_image", "image_url": data_url})
 
+    t0 = time.perf_counter()
     response = await client.responses.create(
         model=get_model(),
         reasoning={"effort": "high"},
@@ -77,6 +98,7 @@ async def run_agent1(
             }
         },
     )
+    meta = _extract_usage_meta(response, t0)
 
     raw_text = _extract_text(response)
     annotations = _extract_file_search_annotations(response)
@@ -86,7 +108,7 @@ async def run_agent1(
     except json.JSONDecodeError:
         parsed = {}
 
-    return parsed, annotations
+    return parsed, annotations, meta
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +120,7 @@ async def run_agent2(
     schema: dict | None = None,
     instructions: str | None = None,
     region: str = "flemish",
-) -> dict:
+) -> tuple[dict, dict]:
     """Enrich Agent 1 mapping with detail fragments → structured report."""
     region = normalize_region(region)
     client = get_client()
@@ -114,6 +136,7 @@ async def run_agent2(
         + "\n```\n"
     )
 
+    t0 = time.perf_counter()
     response = await client.responses.create(
         model=get_model(),
         reasoning={"effort": "high"},
@@ -139,6 +162,7 @@ async def run_agent2(
             }
         },
     )
+    meta = _extract_usage_meta(response, t0)
 
     raw_text = _extract_text(response)
     try:
@@ -146,7 +170,7 @@ async def run_agent2(
     except json.JSONDecodeError:
         parsed = {}
 
-    return parsed
+    return parsed, meta
 
 
 # ---------------------------------------------------------------------------

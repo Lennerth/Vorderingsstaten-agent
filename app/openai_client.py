@@ -11,27 +11,43 @@ from openai import AsyncAzureOpenAI
 from app.regions import PROMPT_FILES, VECTOR_STORE_ENV_KEYS, normalize_region
 
 _client: AsyncAzureOpenAI | None = None
+_deployment: str | None = None
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-AZURE_ENDPOINT = "https://aidalh.cognitiveservices.azure.com/"
-AZURE_DEPLOYMENT = "gpt-5.2"
-AZURE_API_VERSION = "2025-03-01-preview"
+
+_DEFAULT_ENDPOINT = "https://aidalh.cognitiveservices.azure.com/"
+_DEFAULT_DEPLOYMENT = "gpt-5.4"
+_DEFAULT_API_VERSION = "2025-04-01-preview"
+
+
+def _azure_endpoint() -> str:
+    return os.getenv("AZURE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT).strip()
+
+
+def _azure_deployment() -> str:
+    return os.getenv("AZURE_OPENAI_DEPLOYMENT", _DEFAULT_DEPLOYMENT).strip()
+
+
+def _azure_api_version() -> str:
+    return os.getenv("AZURE_OPENAI_API_VERSION", _DEFAULT_API_VERSION).strip()
 
 
 def get_client() -> AsyncAzureOpenAI:
     global _client
     if _client is None:
         _client = AsyncAzureOpenAI(
-            azure_endpoint=AZURE_ENDPOINT,
+            azure_endpoint=_azure_endpoint(),
             api_key=os.environ["AZURE_OPENAI_API_KEY"],
-            api_version=AZURE_API_VERSION,
+            api_version=_azure_api_version(),
         )
     return _client
 
 
 def get_model() -> str:
-    # For Azure OpenAI, model must be the deployment name.
-    return AZURE_DEPLOYMENT
+    global _deployment
+    if _deployment is None:
+        _deployment = _azure_deployment()
+    return _deployment
 
 
 def get_vector_store_id(region: str = "flemish") -> str:

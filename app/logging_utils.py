@@ -27,6 +27,12 @@ class RequestLogger:
         self.start_time = time.time()
         self.entries: list[dict] = []
         self.timings: dict[str, float] = {}
+        self.token_totals: dict[str, int] = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "reasoning_tokens": 0,
+        }
 
     def log_step(self, step: str, data: dict | None = None):
         entry = {
@@ -42,6 +48,12 @@ class RequestLogger:
     def add_timing(self, label: str, duration_s: float):
         self.timings[label] = round(duration_s, 3)
 
+    def add_tokens(self, meta: dict) -> None:
+        for key in self.token_totals:
+            value = meta.get(key)
+            if isinstance(value, int):
+                self.token_totals[key] += value
+
     def persist(self):
         log_dir = Path(os.getenv("LOG_DIR", "logs"))
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -53,6 +65,7 @@ class RequestLogger:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "type": "summary",
             "timings": self.timings,
+            "tokens": self.token_totals,
         }
 
         with open(log_file, "a", encoding="utf-8") as fh:

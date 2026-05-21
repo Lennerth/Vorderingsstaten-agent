@@ -1,0 +1,42 @@
+-- Version 1.7a: Evaluation + configuration hardening
+    Add a safety net before making larger pipeline changes.
+        - Build a small evaluation set with known before/after examples.
+        - Include both Flemish and Walloon examples.
+        - Store expected rough outcomes, not exact model text, so regressions are easier to spot.
+        - Use these examples after major prompt, preprocessing, retrieval, or UI changes.
+        - Externalize Azure endpoint, deployment name, and API version to .env.
+        - Add basic latency/cost-related logging where available.
+
+-- Version 1.7b: Source traceability
+    Make it clearer where the AI got each bestekpost/CCTB poste from.
+        - Surface retrieved master/detail snippets per detected post.
+        - Show source document names, sections, and relevant quotes in a traceable way.
+        - Add confidence badges and warnings in the report/UI.
+        - Keep enough raw evidence in the saved outputs for debugging and quality checks.
+        - Prefer this before video support, because it improves trust in the current workflow.
+
+-- Version 1.7c: Media preprocessing
+    Add better preprocessing for uploaded media before sending it to the AI.
+        - Keep the existing photo resize/compression defaults, but make them easier to tune.
+        - Start with environment-based tuning for image max dimension and JPEG quality.
+        - Add support for downscaling/compressing large photos more aggressively when needed.
+        - Prepare a separate video preprocessing path for timelapse/video uploads.
+        - Define clear limits for video duration, file size, frame count, and accepted formats.
+
+-- Version 1.8: Timelapse support
+    Add the possibility to upload timelapses/videos.
+        - Extract representative frames server-side instead of sending full videos to the model.
+        - Treat each timelapse as one camera position with an ordered temporal frame sequence.
+        - Update prompts so the AI understands more than a strict before/after pair.
+        - Reuse the current image pipeline as much as possible.
+        - Show the selected frames in the UI so the user can understand what the AI analysed.
+        - Choose the video dependency carefully (ffmpeg, av, or opencv-python) to avoid unnecessary bloat.
+
+-- Version 2.0: Major UI upgrade
+    Redesign the interface around reviewability and traceability.
+        - General prettier layout and cleaner visual hierarchy.
+        - Side-by-side image previews and generated report.
+        - Collapsible sections per camera and per bestekpost/poste.
+        - Source panel showing where the AI got each match from.
+        - Export/download options for Markdown and JSON.
+        - Treat PDF export as optional because it adds layout and dependency complexity.

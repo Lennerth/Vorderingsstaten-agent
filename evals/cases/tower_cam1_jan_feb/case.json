@@ -1,0 +1,24 @@
+{
+  "description": "Tower site, cam1, Jan -> Feb (single camera)",
+  "camera_labels": ["Toren cam1"],
+  "pairs": [
+    {
+      "before": "Data AI toren/cam1_2026-01-01_08-00-03.jpeg",
+      "after": "Data AI toren/cam1_2026-01-31_08-00-03.jpeg"
+    }
+  ],
+  "bestekpost_filter": null,
+  "report_fields": null,
+  "expected": {
+    "flemish": {
+      "required_prefixes": ["02"],
+      "forbidden_prefixes": [],
+      "required_keywords": ["silo", "werf"]
+    },
+    "walloon": {
+      "required_prefixes": ["T0.04"],
+      "forbidden_prefixes": [],
+      "required_keywords": ["bâche", "pelleteuse"]
+    }
+  }
+}
