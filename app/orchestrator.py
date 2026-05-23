@@ -50,6 +50,7 @@ async def run_pipeline(
     bestekpost_filter: list[str] | None = None,
     report_fields: list[str] | None = None,
     region: str = "flemish",
+    compression_options: dict | None = None,
 ) -> dict:
     region = normalize_region(region)
     rlog = RequestLogger(request_id)
@@ -57,12 +58,21 @@ async def run_pipeline(
     rlog.log_step("region", {"region": region})
 
     # ── 1. Image optimisation ────────────────────────────────────────────
-    logger.info("[%s] Optimizing images for %d cameras …", request_id, len(camera_pairs))
+    opts = compression_options or {}
+    logger.info(
+        "[%s] Optimizing images for %d cameras (compression mode=%s preset=%s quality=%s target_mb=%s) …",
+        request_id,
+        len(camera_pairs),
+        opts.get("mode", "default"),
+        opts.get("preset"),
+        opts.get("quality"),
+        opts.get("target_image_mb"),
+    )
     
     tasks = []
     for pair in camera_pairs:
-        tasks.append(asyncio.to_thread(optimize_and_encode, pair["before_bytes"]))
-        tasks.append(asyncio.to_thread(optimize_and_encode, pair["after_bytes"]))
+        tasks.append(asyncio.to_thread(optimize_and_encode, pair["before_bytes"], opts))
+        tasks.append(asyncio.to_thread(optimize_and_encode, pair["after_bytes"], opts))
     
     results = await asyncio.gather(*tasks)
     
@@ -71,8 +81,8 @@ async def run_pipeline(
     idx = 1
     
     for i, pair in enumerate(camera_pairs):
-        before_url, before_size = results[i*2]
-        after_url, after_size = results[i*2 + 1]
+        before_url, before_size, before_meta = results[i*2]
+        after_url, after_size, after_meta = results[i*2 + 1]
         camera_label = pair["camera_label"]
         
         images.append((idx, camera_label, "voor", before_url))
@@ -83,10 +93,12 @@ async def run_pipeline(
         sizes_log.append({
             "camera_label": camera_label,
             "before_size": before_size,
-            "after_size": after_size
+            "after_size": after_size,
+            "before_compression": before_meta,
+            "after_compression": after_meta,
         })
 
-    rlog.log_step("image_optimization", {"sizes": sizes_log})
+    rlog.log_step("image_optimization", {"sizes": sizes_log, "compression_options": opts})
     rlog.add_timing("image_optimization", time.time() - t_start)
 
     # ── 2. Agent 1: vision + master file_search ──────────────────────────

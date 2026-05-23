@@ -39,6 +39,9 @@
         .badge-medium { background: #fff3cd; color: #856404; }
         .badge-low { background: #f8d7da; color: #721c24; }
         .warning-text { color: #856404; font-weight: 600; }
+        .advanced-panel { margin-top: 10px; padding: 10px; border: 1px solid #eee; border-radius: 4px; background: #fff; }
+        .advanced-panel.hidden { display: none; }
+        .field-hint { font-size: 0.9em; color: #666; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -67,6 +70,28 @@
                     placeholder="01-03, 05.82-05.89, 10.20"
                     data-i18n-placeholder="filterPlaceholder"
                 >
+
+                <p style="margin-top: 15px;"><strong data-i18n="compressionTitle">Compressie:</strong></p>
+                <label for="compressionPreset"><span data-i18n="compressionPresetLabel">Compressieniveau:</span></label>
+                <select id="compressionPreset" class="form-control">
+                    <option value="low" data-i18n="compressionLow">Laag (meer detail, groter bestand)</option>
+                    <option value="medium" selected data-i18n="compressionMedium">Normaal</option>
+                    <option value="high" data-i18n="compressionHigh">Hoog (kleiner bestand)</option>
+                </select>
+                <p class="field-hint" data-i18n="compressionHint">Normaal gebruikt de bestaande serverinstellingen.</p>
+
+                <label style="display:block; margin-top: 10px;">
+                    <input type="checkbox" id="compressionAdvanced">
+                    <span data-i18n="compressionAdvanced">Geavanceerde instellingen</span>
+                </label>
+                <div id="compressionAdvancedPanel" class="advanced-panel hidden">
+                    <label for="jpegQuality"><span data-i18n="jpegQualityLabel">JPEG kwaliteit (1-95):</span></label>
+                    <input type="number" id="jpegQuality" class="form-control" min="1" max="95" step="1" value="85">
+                    <label for="targetImageMb" style="margin-top: 10px; display:block;">
+                        <span data-i18n="targetImageMbLabel">Doelgrootte per foto (MB):</span>
+                    </label>
+                    <input type="number" id="targetImageMb" class="form-control" min="0.2" max="10" step="0.1" value="2">
+                </div>
 
                 <p><strong data-i18n="reportFields">Rapportvelden:</strong></p>
                 <div class="checkbox-list">
@@ -127,6 +152,15 @@
             addCamera: '+ Camera toevoegen',
             bestekpostFilter: 'Bestekpost filter (optioneel):',
             filterPlaceholder: '01-03, 05.82-05.89, 10.20',
+            compressionTitle: 'Compressie:',
+            compressionPresetLabel: 'Compressieniveau:',
+            compressionLow: 'Laag (meer detail, groter bestand)',
+            compressionMedium: 'Normaal',
+            compressionHigh: 'Hoog (kleiner bestand)',
+            compressionHint: 'Normaal gebruikt de bestaande serverinstellingen.',
+            compressionAdvanced: 'Geavanceerde instellingen',
+            jpegQualityLabel: 'JPEG kwaliteit (1-95):',
+            targetImageMbLabel: 'Doelgrootte per foto (MB):',
             reportFields: 'Rapportvelden:',
             fieldExecuted: 'Uitgevoerd in deze periode',
             fieldRequirements: 'Bestekeisen',
@@ -159,6 +193,15 @@
             addCamera: '+ Ajouter une caméra',
             bestekpostFilter: 'Filtre poste CCTB (optionnel):',
             filterPlaceholder: 'T1.11-T1.19, T2.21, T6',
+            compressionTitle: 'Compression :',
+            compressionPresetLabel: 'Niveau de compression :',
+            compressionLow: 'Faible (plus de détail, fichier plus grand)',
+            compressionMedium: 'Normal',
+            compressionHigh: 'Élevée (fichier plus petit)',
+            compressionHint: 'Normal utilise les paramètres serveur existants.',
+            compressionAdvanced: 'Paramètres avancés',
+            jpegQualityLabel: 'Qualité JPEG (1-95) :',
+            targetImageMbLabel: 'Taille cible par photo (Mo) :',
             reportFields: 'Champs du rapport:',
             fieldExecuted: 'Réalisé sur la période',
             fieldRequirements: 'Exigences CCTB',
@@ -209,6 +252,59 @@
             const key = element.dataset.i18nPlaceholder;
             element.placeholder = t(key, region);
         });
+
+        const presetSelect = document.getElementById('compressionPreset');
+        if (presetSelect) {
+            presetSelect.querySelectorAll('option[data-i18n]').forEach(option => {
+                option.textContent = t(option.dataset.i18n, region);
+            });
+        }
+    }
+
+    function updateCompressionAdvancedPanel() {
+        const advancedCheckbox = document.getElementById('compressionAdvanced');
+        const panel = document.getElementById('compressionAdvancedPanel');
+        const presetSelect = document.getElementById('compressionPreset');
+        if (!advancedCheckbox || !panel) {
+            return;
+        }
+        const enabled = advancedCheckbox.checked;
+        panel.classList.toggle('hidden', !enabled);
+        if (presetSelect) {
+            presetSelect.disabled = enabled;
+        }
+    }
+
+    function appendCompressionFields(formData) {
+        const presetSelect = document.getElementById('compressionPreset');
+        const advancedCheckbox = document.getElementById('compressionAdvanced');
+        if (!presetSelect || !advancedCheckbox) {
+            return;
+        }
+
+        formData.append('compression_preset', presetSelect.value);
+        const advancedEnabled = advancedCheckbox.checked;
+        formData.append('compression_advanced', advancedEnabled ? 'true' : 'false');
+        if (advancedEnabled) {
+            formData.append('jpeg_quality', document.getElementById('jpegQuality').value);
+            formData.append('target_image_mb', document.getElementById('targetImageMb').value);
+        }
+    }
+
+    function checkRequiredUiElements() {
+        const requiredIds = [
+            'uploadForm',
+            'camera-blocks',
+            'addCameraBtn',
+            'submitBtn',
+            'compressionPreset',
+            'compressionAdvanced',
+            'compressionAdvancedPanel',
+        ];
+        const missing = requiredIds.filter(id => !document.getElementById(id));
+        if (missing.length > 0) {
+            console.warn('Missing UI elements:', missing.join(', '));
+        }
     }
 
     function setupPreview(inputElement, imgElement) {
@@ -304,8 +400,14 @@
     // Initialize first block
     addCameraBlock();
     applyLanguage();
+    checkRequiredUiElements();
+    updateCompressionAdvancedPanel();
 
     document.getElementById('addCameraBtn').addEventListener('click', addCameraBlock);
+    const compressionAdvanced = document.getElementById('compressionAdvanced');
+    if (compressionAdvanced) {
+        compressionAdvanced.addEventListener('change', updateCompressionAdvancedPanel);
+    }
     document.getElementById('regionSelect').addEventListener('change', () => {
         const region = currentRegion();
         applyLanguage(region);
@@ -353,6 +455,8 @@
         const reportFields = Array.from(document.querySelectorAll('.report-field:checked'))
             .map(checkbox => checkbox.value);
         formData.append('report_fields', JSON.stringify(reportFields));
+
+        appendCompressionFields(formData);
 
         const submitBtn = document.getElementById('submitBtn');
         const statusDiv = document.getElementById('status');

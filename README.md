@@ -157,8 +157,60 @@ from a `.env` file at the project root via `python-dotenv`.
 | `VECTOR_STORE_ID_WALLOON` | yes* | – | Vector store for the Walloon CCTB. Set by `python -m scripts.init_kb --region walloon`. |
 | `VECTOR_STORE_ID` | no | – | Legacy fallback: used as `VECTOR_STORE_ID_FLEMISH` if the Flemish key is empty. |
 | `LOG_DIR` | no | `logs` | Directory into which the per-request JSONL trace files are written. |
+| `IMAGE_MAX_DIMENSION` | no | `2048` | Longest side in pixels when resizing images before sending to the model. |
+| `IMAGE_JPEG_QUALITY` | no | `85` | JPEG quality (1–95) for standard image compression. |
+| `IMAGE_AGGRESSIVE_MAX_DIMENSION` | no | `1280` | Longest side when the aggressive tier is triggered. |
+| `IMAGE_AGGRESSIVE_JPEG_QUALITY` | no | `70` | JPEG quality for the aggressive tier. |
+| `IMAGE_AGGRESSIVE_TRIGGER_MB` | no | `8` | Input file size in MB above which the aggressive tier applies (only when caller uses default settings). |
+| `UPLOAD_MAX_IMAGE_MB` | no | `20` | Maximum size per uploaded image. |
+| `UPLOAD_MAX_TOTAL_MB` | no | `120` | Maximum combined upload size per request. |
+| `UPLOAD_MAX_PAIRS` | no | `6` | Maximum number of before/after camera pairs per request. |
+| `VIDEO_MAX_DURATION_S` | no | `120` | Placeholder limit for video duration (not enforced until v1.8). |
+| `VIDEO_MAX_FILE_MB` | no | `200` | Placeholder max video file size (used by scaffold validation only). |
+| `VIDEO_MAX_FRAMES` | no | `8` | Placeholder max extracted frames (not enforced until v1.8). |
+| `VIDEO_ACCEPTED_MIME` | no | `video/mp4,video/quicktime` | Comma-separated allowed video MIME types (scaffold only). |
+| `VIDEO_ACCEPTED_EXT` | no | `.mp4,.mov` | Comma-separated allowed video extensions (scaffold only). |
 
 \* At least the store for the region you use must be set.
+
+### Media preprocessing (v1.7c)
+
+Image resize/compression and upload limits are now configurable via the
+`IMAGE_*` and `UPLOAD_*` variables above. With default values, behavior
+is unchanged from earlier versions.
+
+When an uploaded image exceeds `IMAGE_AGGRESSIVE_TRIGGER_MB` and the
+caller does not pass explicit resize settings, the aggressive tier uses
+`IMAGE_AGGRESSIVE_MAX_DIMENSION` and `IMAGE_AGGRESSIVE_JPEG_QUALITY`
+instead. Invalid env values fall back to defaults with a one-time warning.
+
+Video preprocessing lives in [`app/utils/video_processing.py`](app/utils/video_processing.py)
+as a scaffold only: limits and validation helpers exist, but frame
+extraction and API/UI integration are deferred to v1.8. Duration and
+frame-count limits are config placeholders until a real decoder is added.
+
+### UI compression controls (v1.7d)
+
+The built-in uploader ([`static/index.html`](static/index.html)) exposes per-request compression settings:
+
+- **Preset** (`compression_preset`): `low`, `medium` (default), or `high`
+- **Advanced** (`compression_advanced`): when enabled, overrides the preset with:
+  - `jpeg_quality` (1–95)
+  - `target_image_mb` (0.2–10)
+
+Precedence: advanced overrides win when enabled; otherwise the preset mapping applies; `medium` keeps existing server/env defaults (including the aggressive tier for large inputs).
+
+Preset mapping (defined in [`app/api.py`](app/api.py)):
+
+| Preset | JPEG quality | Target size per image |
+| --- | --- | --- |
+| `low` | 90 | 5 MB |
+| `medium` | server default | none |
+| `high` | 65 | 1 MB |
+
+When a target size is set, the backend steps JPEG quality down (minimum 40) until the output fits the budget or the floor is reached. Max-dimension controls are not exposed in the UI.
+
+Request-level compression choices are logged in the JSONL trace under `image_optimization.compression_options` and per-image metadata in `before_compression` / `after_compression`.
 
 ## HTTP endpoints
 
@@ -176,6 +228,10 @@ rendered Markdown report and the underlying JSON.
 | `after_images` | repeated file | One *after* photo per camera, in the same order as `before_images`. Required, length must match. |
 | `camera_labels` | string | A JSON-encoded array of camera labels, one per pair, in the same order (for example `["Living", "Keuken"]`). If missing or invalid, the server falls back to `["Camera 1", "Camera 2", …]`. |
 | `region` | string | `flemish` (default) or `walloon`. Selects vector store, prompts, and report language. |
+| `compression_preset` | string | Optional. `low`, `medium` (default), or `high`. Ignored when `compression_advanced` is enabled. |
+| `compression_advanced` | string | Optional. `true`/`false`. When true, uses `jpeg_quality` and `target_image_mb` instead of the preset. |
+| `jpeg_quality` | string | Required when advanced is enabled. Integer 1–95. |
+| `target_image_mb` | string | Required when advanced is enabled. Float 0.2–10 (MB per optimized image). |
 
 The pairs must be aligned by position: `before_images[i]` and
 `after_images[i]` are treated as the *voor* and *na* photos of
@@ -378,18 +434,19 @@ between them (see step 5 of the pipeline).
 
 ## Limits and resource guardrails
 
-| Constant | Default | Where it is enforced | Purpose |
-| --- | --- | --- | --- |
-| `MAX_PAIRS` | 6 | [`app/api.py`](app/api.py) | Caps the number of camera blocks per request, protecting the vision model from very long image lists. |
-| `MAX_IMAGE_SIZE` | 20 MB | [`app/api.py`](app/api.py) | Rejects individual uploads that are too large before the pipeline starts. |
-| `MAX_TOTAL_SIZE` | 120 MB | [`app/api.py`](app/api.py) | Rejects the request as a whole if the combined size of all images exceeds this threshold. |
-| `MAX_DIMENSION` | 2048 px | [`app/utils/image_processing.py`](app/utils/image_processing.py) | Resizes each image so the longest side is at most 2048 px before encoding. |
-| `JPEG_QUALITY` | 85 | [`app/utils/image_processing.py`](app/utils/image_processing.py) | JPEG compression quality used when re-encoding. |
-| `check_resources` | 10% free RAM / 90% CPU | [`app/utils/system_monitor.py`](app/utils/system_monitor.py) | Returns HTTP 503 when the host is under pressure. |
+| Setting | Default | Env variable | Where enforced | Purpose |
+| --- | --- | --- | --- | --- |
+| Max pairs | 6 | `UPLOAD_MAX_PAIRS` | [`app/api.py`](app/api.py) | Caps the number of camera blocks per request, protecting the vision model from very long image lists. |
+| Max image size | 20 MB | `UPLOAD_MAX_IMAGE_MB` | [`app/api.py`](app/api.py) | Rejects individual uploads that are too large before the pipeline starts. |
+| Max total size | 120 MB | `UPLOAD_MAX_TOTAL_MB` | [`app/api.py`](app/api.py) | Rejects the request as a whole if the combined size of all images exceeds this threshold. |
+| Max dimension | 2048 px | `IMAGE_MAX_DIMENSION` | [`app/utils/image_processing.py`](app/utils/image_processing.py) | Resizes each image so the longest side is at most this many pixels before encoding. |
+| JPEG quality | 85 | `IMAGE_JPEG_QUALITY` | [`app/utils/image_processing.py`](app/utils/image_processing.py) | JPEG compression quality used when re-encoding. |
+| Aggressive tier | 1280 px / quality 70 at ≥8 MB | `IMAGE_AGGRESSIVE_*` | [`app/utils/image_processing.py`](app/utils/image_processing.py) | More aggressive downscale for large phone photos when caller uses default settings. |
+| `check_resources` | 10% free RAM / 90% CPU | – | [`app/utils/system_monitor.py`](app/utils/system_monitor.py) | Returns HTTP 503 when the host is under pressure. |
 
-Change these by editing the constants in the referenced files. All
-values are intentionally conservative for MVP deployment on modest
-hardware.
+Set these via `.env` (see [Configuration](#configuration)). Invalid values
+fall back to defaults with a warning. All values are intentionally
+conservative for MVP deployment on modest hardware.
 
 ## Logging
 
@@ -501,7 +558,7 @@ the resulting vector-store ID back into `.env` on success.
   is below 10 or `cpu_percent` is above 90, close other programs or
   relax the thresholds in `app/utils/system_monitor.py`.
 - **"Image exceeds max size".** Either shrink the image before uploading
-  or raise `MAX_IMAGE_SIZE` in `app/api.py`.
+  or raise `UPLOAD_MAX_IMAGE_MB` in `.env`.
 - **Report numbers look wrong.** Inspect the `agent1_raw_output` entry
   in today's JSONL log. If Agent 1 is producing confident but incorrect
   numbers, the likely cause is a missing or outdated
