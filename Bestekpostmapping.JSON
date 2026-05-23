@@ -3,7 +3,7 @@
   "$id": "https://example.local/schemas/agent1.bestekpostmapper.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["transitions"],
+  "required": ["transitions", "globale_opmerkingen"],
   "properties": {
     "transitions": {
       "type": "array",
@@ -11,7 +11,14 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["from_photo", "to_photo", "bestekpostnummers", "zekerheid"],
+        "required": [
+          "from_photo",
+          "to_photo",
+          "observaties",
+          "bestekpostnummers",
+          "zekerheid",
+          "toelichting"
+        ],
         "properties": {
           "from_photo": {
             "type": "integer",

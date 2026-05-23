@@ -12,7 +12,7 @@ Voor ELKE bestekpost in de input:
 2. Neem optionele velden zoals `image_indices` en `camera_labels` alleen over als ze in het actieve JSON-schema staan.
 3. Vul `zichtbaar_uitgevoerd` alleen als dit veld actief is: benoem UITSLUITEND werk dat nieuw is toegevoegd of duidelijk is gewijzigd ten opzichte van de voor-foto (afgeleid uit de observaties/foto's). Neem geen statische site-condities of reeds in de voor-foto afgewerkt werk op. Dit is een strikte periode-delta.
 4. Vul `bestekeisen` alleen als dit veld actief is: vat de relevante eisen samen in 3–6 bullets.
-5. Vul `bron` alleen als dit veld actief is: verwijs naar deel, sectie en relevante fragmenten (korte quotes).
+5. Vul `bron` alleen als dit veld actief is: verwijs naar deel, sectie en relevante fragmenten (korte quotes). Vul `bestandsnaam` in met de exacte bestandsnaam uit file_search (detailbestek) waaruit de fragmenten komen. Als de bestandsnaam onbekend is, zet `bestandsnaam` op `null` (laat de sleutel niet weg).
 6. Vul `open_punten` alleen als dit veld actief is: identificeer open punten / risico's.
 7. Vul `volgende_stap` alleen als dit veld actief is: geef 1 concrete actie.
 8. Vul UITSLUITEND velden in die in het actieve JSON-schema staan. Plaats informatie voor een niet-actief veld niet in een ander veld.

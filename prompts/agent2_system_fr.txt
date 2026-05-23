@@ -15,6 +15,7 @@ Pour CHAQUE poste :
 5. `bron` (si actif) : référence au chapitre (`deel` = token du fichier, ex. `T2`, `T1`, `A`, `Z`), section et citations courtes.
    - Recherchez dans les fichiers `T0` … `T9`, `A Clauses administratives`, `Z Catalogue` (category=details).
    - Filtrez mentalement sur le chapitre correspondant au préfixe du `nummer` (ex. `T1.11.11.1` → chapitre `T1`).
+   - Renseignez `bestandsnaam` avec le nom exact du fichier CCTB trouvé via file_search. Si le nom est inconnu, mettez `bestandsnaam` à `null` (n'omettez pas la clé).
 6. `open_punten` (si actif) : points ouverts / risques.
 7. `volgende_stap` (si actif) : une action concrète.
 8. Ne remplissez que les champs présents dans le schéma JSON actif.

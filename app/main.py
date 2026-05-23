@@ -21,7 +21,7 @@ logging.basicConfig(
 
 app = FastAPI(
     title="Vorderingsstaten Agent API",
-    version="1.7a",
+    version="1.7b",
     description="Automated progress-report generation from construction site photos.",
 )
 

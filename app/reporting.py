@@ -5,7 +5,31 @@ from __future__ import annotations
 from collections import defaultdict
 
 from app.models import Agent2Output
-from app.regions import CERTAINTY_LABELS, REPORT_LABELS, normalize_region
+from app.regions import (
+    CERTAINTY_LABELS,
+    LOW_CONFIDENCE_WARNING,
+    REPORT_LABELS,
+    normalize_region,
+)
+
+_CONFIDENCE_BADGE_CLASS = {
+    "hoog": "badge-high",
+    "middel": "badge-medium",
+    "laag": "badge-low",
+}
+
+
+def _confidence_badge_html(region: str, zekerheid: str) -> str:
+    label = CERTAINTY_LABELS[region].get(zekerheid, zekerheid)
+    css_class = _CONFIDENCE_BADGE_CLASS.get(zekerheid, "badge-medium")
+    return f'<span class="badge {css_class}">{label}</span>'
+
+
+def _format_bullet_item(text: str, region: str) -> str:
+    warning = LOW_CONFIDENCE_WARNING[region]
+    if warning.lower() in text.lower():
+        return f'- <span class="warning-text">{text}</span>'
+    return f"- {text}"
 
 
 def render_markdown(
@@ -78,8 +102,11 @@ def render_markdown(
             parts.append(
                 L["cameras"].format(cameras=cameras_str, indices=indices_str)
             )
-        certainty = CERTAINTY_LABELS[region].get(bp.zekerheid, bp.zekerheid)
-        parts.append(L["zekerheid"].format(zekerheid=certainty))
+        parts.append(
+            L["zekerheid"].format(
+                zekerheid=_confidence_badge_html(region, bp.zekerheid)
+            )
+        )
         parts.append("")
 
         if bp.zichtbaar_uitgevoerd is not None:
@@ -98,6 +125,10 @@ def render_markdown(
             parts.append(L["bron"])
             parts.append(L["bron_deel"].format(deel=bp.bron.deel))
             parts.append(L["bron_sectie"].format(sectie=bp.bron.sectie))
+            if bp.bron.bestandsnaam:
+                parts.append(
+                    L["bron_bestandsnaam"].format(bestandsnaam=bp.bron.bestandsnaam)
+                )
             parts.append(L["bron_fragmenten"])
             for frag in bp.bron.fragmenten:
                 parts.append(f'  - "{frag}"')
@@ -106,7 +137,7 @@ def render_markdown(
         if bp.open_punten is not None:
             parts.append(L["open_punten"])
             for item in bp.open_punten:
-                parts.append(f"- {item}")
+                parts.append(_format_bullet_item(item, region))
             parts.append("")
 
         if bp.volgende_stap is not None:
@@ -123,6 +154,6 @@ def render_markdown(
     if output.extra_input_nodig:
         parts.append(L["extra_input"])
         for item in output.extra_input_nodig:
-            parts.append(f"- {item}")
+            parts.append(_format_bullet_item(item, region))
 
     return "\n".join(parts)

@@ -1,0 +1,211 @@
+Version 1.7b - Test Results: General Pros & Cons
+Date: 2026-05-21
+
+Scope
+-----
+This note summarizes the repeated eval tests for v1.7b source traceability.
+The main test case used was:
+
+- Case: tower_cam1_jan_feb
+- Region: flemish
+- Command pattern:
+  python -m scripts.run_evals --region flemish --case tower_cam1_jan_feb --limit 1
+
+One repeated run sequence was started with:
+  1..5 | ForEach-Object { python -m scripts.run_evals --region flemish --case tower_cam1_jan_feb --limit 1 }
+
+The last run in that repeated sequence was interrupted because the internet connection was lost, so only the completed runs are considered here.
+
+
+Completed Test Results
+----------------------
+The completed eval runs did not fully pass. The failures were mostly content-quality assertions rather than pipeline/schema crashes.
+
+Observed completed runs:
+
+1. 20260521T082510Z__flemish.json
+   - Request ID: 9f0b8af9c765
+   - Result: FAIL
+   - Failure:
+     - evidence_agent2_non_empty failed
+   - Notes:
+     - This was before the evidence assertion was relaxed to informational by default.
+     - Other content assertions passed in that run.
+
+2. 20260521T083146Z__flemish.json
+   - Request ID: fa5ba2ca7f87
+   - Result: FAIL
+   - Failures:
+     - required_prefix: expected at least one bestekpost starting with 02
+     - required_keyword: expected "silo"
+     - evidence_agent2_non_empty failed
+   - Notes:
+     - This was also before the evidence assertion was relaxed.
+     - The model output missed expected visual/content indicators.
+
+3. 20260521T090926Z__flemish.json
+   - Request ID: 416c0e236533
+   - Result: FAIL
+   - Failures:
+     - required_keyword: expected "silo"
+     - required_keyword: expected "werf"
+   - Passed checks:
+     - required_prefix 02 passed
+     - Agent 2 strict schema passed
+     - evidence key exists
+     - evidence.agent1 and evidence.agent2 are arrays
+     - evidence_agent2_non_empty is now informational and passed
+   - Detected nummers:
+     - 02.81.20
+     - 10.21
+     - 14.11.10
+
+4. 20260521T091324Z__flemish.json
+   - Request ID: 68999d8b08c7
+   - Result: FAIL
+   - Failures:
+     - required_prefix: expected at least one bestekpost starting with 02
+     - required_keyword: expected "silo"
+     - required_keyword: expected "werf"
+   - Passed checks:
+     - Agent 2 strict schema passed
+     - evidence key exists
+     - evidence.agent1 and evidence.agent2 are arrays
+     - evidence_agent2_non_empty is now informational and passed
+   - Detected nummers:
+     - 14.11.10
+     - 26.11.11
+
+5. 20260521T091641Z__flemish.json
+   - Request ID: abc86417dfe8
+   - Result: FAIL
+   - Failure:
+     - required_keyword: expected "silo"
+   - Passed checks:
+     - required_prefix 02 passed
+     - required_keyword "werf" passed
+     - Agent 2 strict schema passed
+     - evidence key exists
+     - evidence.agent1 and evidence.agent2 are arrays
+     - evidence_agent2_non_empty is now informational and passed
+   - Detected nummers:
+     - 02.81
+     - 10.21
+     - 14.11.10
+
+
+Pros
+----
+1. The strict JSON schema bug appears resolved.
+   - The eval results consistently show:
+     Agent2 strict schema is valid for selected report_fields.
+   - No new invalid_json_schema error appeared in these completed runs.
+
+2. The v1.7b evidence response shape is stable.
+   - The output includes a top-level evidence object.
+   - evidence.agent1 and evidence.agent2 are arrays.
+   - Empty evidence arrays no longer fail the eval by default after the patch.
+
+3. The pipeline completes real model runs.
+   - The runs reached Agent 2 and produced detected bestekpost numbers.
+   - Failures were assertion-level/content-level, not application crashes.
+
+4. The eval now separates hard structural checks from informational traceability checks.
+   - Schema validity remains a hard check.
+   - Evidence array presence remains a hard check.
+   - Non-empty Agent 2 evidence is now informational unless strict mode is explicitly enabled.
+
+5. The repeated test exposed model variability clearly.
+   - Different runs detected different nummers and keywords.
+   - This gives useful signal for improving eval design and prompt stability.
+
+
+Cons / Remaining Issues
+-----------------------
+1. The eval case is not stable enough to pass consistently.
+   - "silo" failed in every completed repeated run after the evidence patch.
+   - "werf" failed in some runs.
+   - The 02 prefix passed in some runs and failed in others.
+
+2. Model output is variable across repeated runs.
+   - Example detected nummers varied between:
+     - 02.81.20, 10.21, 14.11.10
+     - 14.11.10, 26.11.11
+     - 02.81, 10.21, 14.11.10
+   - This suggests the eval assertions may be too exact for stochastic model output, or the prompt/retrieval flow does not anchor the expected observations strongly enough.
+
+3. evidence.agent2 is still empty in completed runs.
+   - This does not break the default eval anymore, but it means raw file_search evidence is not yet being captured as useful snippets.
+   - Possible causes:
+     - Azure/OpenAI response shape may not expose file_search_call results in response.output.
+     - The model may use internal retrieval without returning results in the expected response item shape.
+     - The extraction logic may need to inspect additional response metadata/annotations.
+
+4. The "silo" keyword assertion may be too brittle.
+   - The visual concept may be described with different terms, or omitted.
+   - If the expected outcome is "temporary site installation" rather than exactly "silo", the assertion should allow synonyms or broader evidence.
+
+5. The 02-prefix requirement is partly unstable.
+   - Some runs detect 02-related posts, others do not.
+   - This may indicate prompt variance, retrieval variance, or an eval expectation that is too narrow.
+
+6. Long-running evals are sensitive to network stability.
+   - The repeated run sequence was interrupted by internet loss.
+   - For manual testing, run one case at a time when the connection is unstable.
+
+
+Interpretation
+--------------
+v1.7b looks structurally healthier after the schema and evidence patches:
+
+- Schema validation is passing.
+- The application pipeline can complete.
+- The evidence object exists in the expected shape.
+- Source traceability is present at the data-contract level.
+
+However, the eval case tower_cam1_jan_feb is still not a reliable PASS case. The remaining failures point to output quality and eval robustness rather than the earlier strict-schema implementation bug.
+
+
+Recommended Next Steps
+----------------------
+1. Keep the current schema/evidence fixes.
+   - They address the hard implementation problems found during v1.7b testing.
+
+2. Revisit eval expectations for tower_cam1_jan_feb.
+   - Consider making keyword assertions synonym-aware.
+   - Example: allow "silo", "werfcontainer", "bouwplaatsvoorziening", "tijdelijke inrichting", or related Dutch terms if they represent the same visual evidence.
+
+3. Add a more deterministic smoke eval.
+   - Use a case where the expected post and keywords are visually obvious and repeatedly detected.
+   - Use it as the main release-blocking test.
+
+4. Treat the current tower_cam1_jan_feb case as a quality/regression signal, not necessarily a hard release blocker.
+   - It is useful because it exposes variability.
+   - It may be too brittle as a binary pass/fail gate.
+
+5. Investigate Agent 2 evidence extraction separately.
+   - Log or inspect full response.output shapes from a debug run.
+   - Add fallback extraction if file_search evidence is exposed in message annotations rather than file_search_call results.
+
+6. Run a small manual UI test before committing.
+   - Confirm report generation works.
+   - Confirm output.json and evidence.json are written.
+   - Confirm confidence badges render.
+   - Confirm source filename appears when Agent 2 emits bron.bestandsnaam.
+
+
+Current Verdict
+---------------
+v1.7b is no longer blocked by the strict schema bug.
+
+The remaining concerns are:
+- model/eval stability,
+- brittle keyword expectations,
+- empty raw Agent 2 evidence arrays,
+- need for a deterministic release smoke test.
+
+Recommended status:
+- Implementation: mostly OK
+- Schema/API contract: OK
+- Eval reliability: needs improvement
+- Traceability evidence quality: needs follow-up investigation

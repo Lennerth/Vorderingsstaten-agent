@@ -69,6 +69,13 @@ def save_report_output(
         encoding="utf-8",
     )
 
+    evidence = result.get("evidence")
+    if evidence is not None:
+        (output_dir / "evidence.json").write_text(
+            json.dumps(evidence, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
     return output_dir
 
 

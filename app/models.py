@@ -31,6 +31,7 @@ class BronInfo(BaseModel):
     deel: str
     sectie: str
     fragmenten: list[str]
+    bestandsnaam: str | None = None
 
 
 class BestekpostDetail(BaseModel):

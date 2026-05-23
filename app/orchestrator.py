@@ -8,7 +8,12 @@ import logging
 import re
 import time
 
-from app.kb import run_agent1, run_agent2
+from app.kb import (
+    enrich_evidence_with_provenance_fallback,
+    run_agent1,
+    run_agent2,
+    summarize_evidence_items,
+)
 from app.logging_utils import RequestLogger
 from app.models import Agent1Output, Agent2Output
 from app.openai_client import load_region_prompt, load_schema
@@ -130,6 +135,7 @@ async def run_pipeline(
             },
         )
 
+    rlog.log_step("agent1_retrieval", {"hits": len(agent1_annotations)})
     rlog.add_timing("agent1", time.time() - t1)
     total_posts = len(agent1.bestekposten)
     logger.info("[%s] Agent 1 returned %d bestekposten", request_id, total_posts)
@@ -148,7 +154,7 @@ async def run_pipeline(
     agent2_instructions = _build_agent2_instructions(
         selected_report_fields, region=region
     )
-    agent2_raw, agent2_meta = await run_agent2(
+    agent2_raw, agent2_annotations, agent2_meta = await run_agent2(
         agent1_raw,
         schema=agent2_schema,
         instructions=agent2_instructions,
@@ -163,7 +169,7 @@ async def run_pipeline(
     except Exception as exc:
         logger.warning("[%s] Agent 2 validation failed (%s), retrying …", request_id, exc)
         rlog.log_step("agent2_retry", {"error": str(exc)})
-        agent2_raw, agent2_meta = await run_agent2(
+        agent2_raw, agent2_annotations, agent2_meta = await run_agent2(
             agent1_raw,
             schema=agent2_schema,
             instructions=agent2_instructions,
@@ -171,7 +177,29 @@ async def run_pipeline(
         )
         rlog.log_step("agent2_retry_usage", agent2_meta)
         rlog.add_tokens(agent2_meta)
+        rlog.log_step("agent2_retry_raw_output", {"output": agent2_raw})
         agent2 = Agent2Output.model_validate(agent2_raw)
+    agent2_annotations = enrich_evidence_with_provenance_fallback(
+        agent2_annotations,
+        agent2_raw.get("bestekposten") or [],
+    )
+    agent2_quality = summarize_evidence_items(agent2_annotations)
+    agent2_extraction = agent2_meta.get("evidence_extraction", {})
+    rlog.log_step(
+        "agent2_retrieval",
+        {
+            "hits": len(agent2_annotations),
+            **agent2_extraction,
+            "quality": agent2_quality,
+            "empty_text_hits": agent2_quality["empty_text_hits"],
+            "null_score_hits": agent2_quality["null_score_hits"],
+            "fallback_derived_hits": agent2_quality["fallback_derived_hits"],
+            "score_available_hits": agent2_quality["with_score"],
+            "score_missing_hits": agent2_quality["null_score_hits"],
+            "score_source_type_breakdown": agent2_quality["score_source_type_breakdown"],
+            "include_payload_present": agent2_extraction.get("include_payload_present", False),
+        },
+    )
 
     _enforce_low_confidence(agent1, agent2, region)
     
@@ -191,12 +219,51 @@ async def run_pipeline(
     logger.info("[%s] Pipeline complete in %.1f s", request_id, total_time)
 
     rlog.log_step("pipeline_complete", {"total_s": round(total_time, 2)})
+    agent1_quality = summarize_evidence_items(agent1_annotations)
+    agent1_extraction = agent1_meta.get("evidence_extraction", {})
+    agent2_extraction = agent2_meta.get("evidence_extraction", {})
+    rlog.log_step(
+        "retrieval_evidence",
+        {
+            "agent1_hits": len(agent1_annotations),
+            "agent2_hits": len(agent2_annotations),
+            "agent1_extraction": agent1_extraction,
+            "agent2_extraction": agent2_extraction,
+            "agent1_quality": agent1_quality,
+            "agent2_quality": agent2_quality,
+            "agent1_empty_text_hits": agent1_quality["empty_text_hits"],
+            "agent1_null_score_hits": agent1_quality["null_score_hits"],
+            "agent1_fallback_derived_hits": agent1_quality["fallback_derived_hits"],
+            "agent1_score_available_hits": agent1_quality["with_score"],
+            "agent1_score_missing_hits": agent1_quality["null_score_hits"],
+            "agent1_score_source_type_breakdown": agent1_quality["score_source_type_breakdown"],
+            "agent1_include_payload_present": agent1_extraction.get("include_payload_present", False),
+            "agent2_empty_text_hits": agent2_quality["empty_text_hits"],
+            "agent2_null_score_hits": agent2_quality["null_score_hits"],
+            "agent2_fallback_derived_hits": agent2_quality["fallback_derived_hits"],
+            "agent2_score_available_hits": agent2_quality["with_score"],
+            "agent2_score_missing_hits": agent2_quality["null_score_hits"],
+            "agent2_score_source_type_breakdown": agent2_quality["score_source_type_breakdown"],
+            "agent2_include_payload_present": agent2_extraction.get("include_payload_present", False),
+        },
+    )
     rlog.persist()
+
+    evidence = {
+        "agent1": agent1_annotations,
+        "agent2": agent2_annotations,
+    }
+    evidence_diagnostics = {
+        "agent1": agent1_extraction,
+        "agent2": agent2_extraction,
+    }
 
     return {
         "markdown_report": markdown,
         "agent2_json": agent2.model_dump(exclude_none=True),
         "agent1_json": agent1.model_dump(),
+        "evidence": evidence,
+        "evidence_diagnostics": evidence_diagnostics,
     }
 
 
@@ -328,6 +395,13 @@ def _build_agent2_schema(report_fields: set[str]) -> dict:
         for field in item_schema.get("required", [])
         if field in ALWAYS_REQUIRED_AGENT2_FIELDS or field in report_fields
     ]
+    strict_issues = _find_strict_schema_issues(schema)
+    if strict_issues:
+        details = "; ".join(strict_issues[:5])
+        raise RuntimeError(
+            "Invalid Agent 2 strict schema configuration. "
+            f"Every object property must be listed in required. Details: {details}"
+        )
     return schema
 
 
@@ -345,3 +419,39 @@ def _build_agent2_instructions(report_fields: set[str], region: str = "flemish")
         f"{msgs['agent2_active_fields_header']}\n"
         f"{msgs['agent2_active_fields_body'].format(active=', '.join(active_fields), inactive=inactive_str)}"
     )
+
+
+def _find_strict_schema_issues(node: object, path: str = "$") -> list[str]:
+    issues: list[str] = []
+    if not isinstance(node, dict):
+        return issues
+
+    if node.get("type") == "object":
+        properties = node.get("properties")
+        required = node.get("required")
+        if isinstance(properties, dict):
+            prop_keys = set(properties.keys())
+            if not isinstance(required, list):
+                issues.append(f"{path}: missing required list")
+            else:
+                required_keys = set(required)
+                missing = sorted(prop_keys - required_keys)
+                if missing:
+                    issues.append(f"{path}: required missing {missing}")
+
+    properties = node.get("properties")
+    if isinstance(properties, dict):
+        for key, child in properties.items():
+            issues.extend(_find_strict_schema_issues(child, f"{path}.properties.{key}"))
+
+    items = node.get("items")
+    if isinstance(items, dict):
+        issues.extend(_find_strict_schema_issues(items, f"{path}.items"))
+
+    for branch_key in ("anyOf", "oneOf", "allOf"):
+        branches = node.get(branch_key)
+        if isinstance(branches, list):
+            for idx, branch in enumerate(branches):
+                issues.extend(_find_strict_schema_issues(branch, f"{path}.{branch_key}[{idx}]"))
+
+    return issues

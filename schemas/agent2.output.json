@@ -44,13 +44,16 @@
           },
           "bron": {
             "type": "object",
-            "required": ["deel", "sectie", "fragmenten"],
+            "required": ["deel", "sectie", "fragmenten", "bestandsnaam"],
             "properties": {
               "deel": { "type": "string" },
               "sectie": { "type": "string" },
               "fragmenten": {
                 "type": "array",
                 "items": { "type": "string" }
+              },
+              "bestandsnaam": {
+                "anyOf": [{ "type": "string" }, { "type": "null" }]
               }
             },
             "additionalProperties": false
