@@ -329,20 +329,21 @@ def _check_evidence(
     return all_passed, assertions
 
 
-def _build_camera_pairs(case: dict) -> list[dict]:
+def _build_camera_inputs(case: dict) -> list[dict]:
     labels = case.get("camera_labels") or []
     pairs = case["pairs"]
-    camera_pairs = []
+    camera_inputs = []
     for i, pair in enumerate(pairs):
         label = labels[i] if i < len(labels) else f"Camera {i + 1}"
         before_path = PROJECT_ROOT / pair["before"]
         after_path = PROJECT_ROOT / pair["after"]
-        camera_pairs.append({
+        camera_inputs.append({
+            "kind": "pair",
             "camera_label": label,
             "before_bytes": before_path.read_bytes(),
             "after_bytes": after_path.read_bytes(),
         })
-    return camera_pairs
+    return camera_inputs
 
 
 def _list_cases(case_filter: list[str] | None) -> int:
@@ -437,9 +438,9 @@ async def _run_case_region(
         }
 
     request_id = generate_request_id()
-    camera_pairs = _build_camera_pairs(case)
+    camera_inputs = _build_camera_inputs(case)
     result = await run_pipeline(
-        camera_pairs,
+        camera_inputs,
         request_id,
         bestekpost_filter=case.get("bestekpost_filter"),
         report_fields=case.get("report_fields"),

@@ -164,12 +164,16 @@ from a `.env` file at the project root via `python-dotenv`.
 | `IMAGE_AGGRESSIVE_TRIGGER_MB` | no | `8` | Input file size in MB above which the aggressive tier applies (only when caller uses default settings). |
 | `UPLOAD_MAX_IMAGE_MB` | no | `20` | Maximum size per uploaded image. |
 | `UPLOAD_MAX_TOTAL_MB` | no | `120` | Maximum combined upload size per request. |
-| `UPLOAD_MAX_PAIRS` | no | `6` | Maximum number of before/after camera pairs per request. |
-| `VIDEO_MAX_DURATION_S` | no | `120` | Placeholder limit for video duration (not enforced until v1.8). |
-| `VIDEO_MAX_FILE_MB` | no | `200` | Placeholder max video file size (used by scaffold validation only). |
-| `VIDEO_MAX_FRAMES` | no | `8` | Placeholder max extracted frames (not enforced until v1.8). |
-| `VIDEO_ACCEPTED_MIME` | no | `video/mp4,video/quicktime` | Comma-separated allowed video MIME types (scaffold only). |
-| `VIDEO_ACCEPTED_EXT` | no | `.mp4,.mov` | Comma-separated allowed video extensions (scaffold only). |
+| `UPLOAD_MAX_PAIRS` | no | `6` | Maximum number of camera tracks (pairs + timelapses) per request. |
+| `VIDEO_MAX_DURATION_S` | no | `120` | Maximum timelapse duration in seconds (enforced after decode). |
+| `VIDEO_MAX_FILE_MB` | no | `200` | Maximum timelapse upload size in MB. |
+| `VIDEO_MAX_FRAMES` | no | `8` | Maximum frames extracted per timelapse (first + last + uniform spacing). |
+| `VIDEO_ACCEPTED_MIME` | no | `video/mp4,video/quicktime` | Comma-separated allowed video MIME types. |
+| `VIDEO_ACCEPTED_EXT` | no | `.mp4,.mov` | Comma-separated allowed video extensions. |
+| `COMPRESSION_PRESET_LOW_QUALITY` | no | `90` | JPEG quality for UI preset `low`. |
+| `COMPRESSION_PRESET_LOW_TARGET_MB` | no | `5` | Target size per image for preset `low`. |
+| `COMPRESSION_PRESET_HIGH_QUALITY` | no | `65` | JPEG quality for UI preset `high`. |
+| `COMPRESSION_PRESET_HIGH_TARGET_MB` | no | `1` | Target size per image for preset `high`. |
 
 \* At least the store for the region you use must be set.
 
@@ -184,14 +188,30 @@ caller does not pass explicit resize settings, the aggressive tier uses
 `IMAGE_AGGRESSIVE_MAX_DIMENSION` and `IMAGE_AGGRESSIVE_JPEG_QUALITY`
 instead. Invalid env values fall back to defaults with a one-time warning.
 
-Video preprocessing lives in [`app/utils/video_processing.py`](app/utils/video_processing.py)
-as a scaffold only: limits and validation helpers exist, but frame
-extraction and API/UI integration are deferred to v1.8. Duration and
-frame-count limits are config placeholders until a real decoder is added.
+### Timelapse support (v1.8)
+
+Each camera track can be either a **before/after image pair** or a **timelapse
+video** (`.mp4` / `.mov`). Videos are decoded server-side with
+[`imageio-ffmpeg`](https://pypi.org/project/imageio-ffmpeg/); representative
+frames are extracted (first, last, and uniformly spaced in between, up to
+`VIDEO_MAX_FRAMES`), re-compressed through the existing image pipeline, and
+sent to Agent 1 as an ordered temporal sequence.
+
+The API accepts mixed tracks in one request:
+
+| Field | Description |
+| --- | --- |
+| `before_images[]` / `after_images[]` | Image pair tracks (same order as `camera_labels`) |
+| `camera_labels` | JSON array of labels for pair tracks |
+| `videos[]` | Timelapse uploads (same order as `video_labels`) |
+| `video_labels` | JSON array of labels for timelapse tracks |
+| `track_order` | JSON array of `"pair"` / `"timelapse"` in camera block order |
+
+If `track_order` is omitted, all pair tracks are processed before timelapse
+tracks. Extracted frames are returned in `extracted_frames` and saved under
+`outputs/<run>/frames/<camera>/` for review.
 
 ### UI compression controls (v1.7d)
-
-The built-in uploader ([`static/index.html`](static/index.html)) exposes per-request compression settings:
 
 - **Preset** (`compression_preset`): `low`, `medium` (default), or `high`
 - **Advanced** (`compression_advanced`): when enabled, overrides the preset with:
@@ -568,3 +588,10 @@ the resulting vector-store ID back into `.env` on success.
   during optimisation, so rotated input should render upright. If it
   does not, the source image may have no EXIF orientation tag and needs
   to be rotated manually before upload.
+- **Timelapse upload rejected.** Check MIME type (`.mp4`/`.mov`), file size
+  (`VIDEO_MAX_FILE_MB`), and duration (`VIDEO_MAX_DURATION_S`). See server
+  logs for the exact validation message.
+- **Offline regression tests.** Install dev dependencies with
+  `python -m pip install -r requirements-dev.txt`, then run
+  `python -m pytest tests`. Video-related tests require `imageio-ffmpeg`
+  (bundled binary installed automatically with `pip install -r requirements.txt`).

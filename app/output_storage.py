@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from app.regions import OUTPUT_STORAGE_LABELS, normalize_region
@@ -10,12 +11,12 @@ from app.regions import OUTPUT_STORAGE_LABELS, normalize_region
 
 def save_report_output(
     result: dict,
-    uploaded_images: list[dict],
+    uploaded_tracks: list[dict],
     report_fields: list[str],
     bestekpost_filters: list[str],
     region: str = "flemish",
 ) -> Path:
-    """Save markdown, uploaded filenames, and JSON output for one request."""
+    """Save markdown, uploaded filenames, extracted frames, and JSON output."""
     region = normalize_region(region)
     labels = OUTPUT_STORAGE_LABELS[region]
     outputs_root = Path("outputs")
@@ -28,14 +29,28 @@ def save_report_output(
         labels["uploaded_images_title"],
         "",
     ]
-    for image_info in uploaded_images:
-        camera_label = image_info.get("camera_label", labels["camera_fallback"])
-        before_name = image_info.get("before_filename", labels["unknown_before"])
-        after_name = image_info.get("after_filename", labels["unknown_after"])
-        image_lines.append(f"{camera_label}:")
-        image_lines.append(f"- {labels['before']}: {before_name}")
-        image_lines.append(f"- {labels['after']}: {after_name}")
+    for track in uploaded_tracks:
+        camera_label = track.get("camera_label", labels["camera_fallback"])
+        kind = track.get("kind", "pair")
+        if kind == "timelapse":
+            video_name = track.get("video_filename", labels["unknown_video"])
+            timestamps = track.get("timestamps") or []
+            frame_count = track.get("frame_count", len(timestamps))
+            ts_summary = ", ".join(f"{ts:g}s" for ts in timestamps)
+            image_lines.append(f"{camera_label} ({labels['timelapse']}):")
+            image_lines.append(f"- {labels['timelapse_video']}: {video_name}")
+            image_lines.append(
+                f"- {labels['timelapse_frames']}: {frame_count} ({ts_summary})"
+            )
+            _save_timelapse_frames(output_dir, track)
+        else:
+            before_name = track.get("before_filename", labels["unknown_before"])
+            after_name = track.get("after_filename", labels["unknown_after"])
+            image_lines.append(f"{camera_label}:")
+            image_lines.append(f"- {labels['before']}: {before_name}")
+            image_lines.append(f"- {labels['after']}: {after_name}")
         image_lines.append("")
+
     (output_dir / "uploaded_images.txt").write_text(
         "\n".join(image_lines).rstrip() + "\n",
         encoding="utf-8",
@@ -64,8 +79,9 @@ def save_report_output(
         encoding="utf-8",
     )
 
+    serializable_result = dict(result)
     (output_dir / "output.json").write_text(
-        json.dumps(result, ensure_ascii=False, indent=2),
+        json.dumps(serializable_result, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -77,6 +93,26 @@ def save_report_output(
         )
 
     return output_dir
+
+
+def _save_timelapse_frames(output_dir: Path, track: dict) -> None:
+    camera_label = track.get("camera_label", "camera")
+    safe_label = _safe_dir_name(camera_label)
+    frames_dir = output_dir / "frames" / safe_label
+    frames_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamps = track.get("timestamps") or []
+    frame_bytes = track.get("frame_jpeg_bytes") or []
+    for index, (timestamp_s, jpeg_bytes) in enumerate(
+        zip(timestamps, frame_bytes), start=1
+    ):
+        filename = f"frame_{index:02d}_t{timestamp_s:g}.jpg"
+        (frames_dir / filename).write_bytes(jpeg_bytes)
+
+
+def _safe_dir_name(value: str) -> str:
+    cleaned = re.sub(r"[^\w\- ]+", "_", value.strip())
+    return cleaned.replace(" ", "_") or "camera"
 
 
 def _create_next_output_dir(outputs_root: Path) -> Path:

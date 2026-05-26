@@ -59,11 +59,30 @@ def render_markdown(
         camera_map[label][role] = idx
 
     for label, roles in camera_map.items():
-        voor_idx = roles.get("voor", "?")
-        na_idx = roles.get("na", "?")
-        parts.append(
-            L["photo_pair"].format(label=label, voor_idx=voor_idx, na_idx=na_idx)
-        )
+        if "voor" in roles and "na" in roles:
+            parts.append(
+                L["photo_pair"].format(
+                    label=label,
+                    voor_idx=roles.get("voor", "?"),
+                    na_idx=roles.get("na", "?"),
+                )
+            )
+        else:
+            t_roles = sorted(
+                (key for key in roles if key.startswith("t=")),
+                key=lambda key: float(key.removeprefix("t=")),
+            )
+            indices = ", ".join(str(roles[key]) for key in t_roles)
+            timestamps = " … ".join(
+                f"{key.removeprefix('t=')}s" for key in (t_roles[0], t_roles[-1])
+            ) if t_roles else "?"
+            parts.append(
+                L["timelapse_track"].format(
+                    label=label,
+                    indices=indices,
+                    timestamps=timestamps,
+                )
+            )
 
     parts.append("\n---\n")
 

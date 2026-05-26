@@ -21,8 +21,8 @@ logging.basicConfig(
 
 app = FastAPI(
     title="Vorderingsstaten Agent API",
-    version="1.7b",
-    description="Automated progress-report generation from construction site photos.",
+    version="1.8",
+    description="Automated progress-report generation from construction site photos and timelapses.",
 )
 
 # Serve static files (HTML client)

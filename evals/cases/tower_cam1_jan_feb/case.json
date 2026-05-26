@@ -13,7 +13,7 @@
     "flemish": {
       "required_prefixes": ["02"],
       "forbidden_prefixes": [],
-      "required_keywords": ["silo", "werf"]
+      "required_keywords": [["silo", "werfcontainer", "tijdelijke inrichting"], "werf"]
     },
     "walloon": {
       "required_prefixes": ["T0.04"],

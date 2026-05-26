@@ -68,10 +68,20 @@ async def run_agent1(
 
     text_lines = []
     for idx, camera_label, role, _ in images:
-        role_label = roles.get(role, role)
-        text_lines.append(
-            msgs["photo_line"].format(idx=idx, camera=camera_label, role=role_label)
-        )
+        if role.startswith("t="):
+            timestamp = role.removeprefix("t=")
+            text_lines.append(
+                msgs["timelapse_photo_line"].format(
+                    idx=idx,
+                    camera=camera_label,
+                    timestamp=timestamp,
+                )
+            )
+        else:
+            role_label = roles.get(role, role)
+            text_lines.append(
+                msgs["photo_line"].format(idx=idx, camera=camera_label, role=role_label)
+            )
 
     text_lines.append(msgs["analysis_instruction"])
     if bestekpost_filters:

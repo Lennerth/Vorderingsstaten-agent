@@ -45,7 +45,7 @@ class InvalidBestekpostFilter(ValueError):
 
 
 async def run_pipeline(
-    camera_pairs: list[dict],
+    camera_inputs: list[dict],
     request_id: str,
     bestekpost_filter: list[str] | None = None,
     report_fields: list[str] | None = None,
@@ -60,43 +60,99 @@ async def run_pipeline(
     # ── 1. Image optimisation ────────────────────────────────────────────
     opts = compression_options or {}
     logger.info(
-        "[%s] Optimizing images for %d cameras (compression mode=%s preset=%s quality=%s target_mb=%s) …",
+        "[%s] Optimizing images for %d camera track(s) (compression mode=%s preset=%s quality=%s target_mb=%s) …",
         request_id,
-        len(camera_pairs),
+        len(camera_inputs),
         opts.get("mode", "default"),
         opts.get("preset"),
         opts.get("quality"),
         opts.get("target_image_mb"),
     )
-    
-    tasks = []
-    for pair in camera_pairs:
-        tasks.append(asyncio.to_thread(optimize_and_encode, pair["before_bytes"], opts))
-        tasks.append(asyncio.to_thread(optimize_and_encode, pair["after_bytes"], opts))
-    
+
+    tasks: list = []
+    task_meta: list[tuple[str, str, str | None]] = []
+
+    for track in camera_inputs:
+        kind = track.get("kind", "pair")
+        label = track["camera_label"]
+        if kind == "pair":
+            tasks.append(asyncio.to_thread(optimize_and_encode, track["before_bytes"], opts))
+            task_meta.append((label, "voor", None))
+            tasks.append(asyncio.to_thread(optimize_and_encode, track["after_bytes"], opts))
+            task_meta.append((label, "na", None))
+        elif kind == "timelapse":
+            for frame in track["frames"]:
+                tasks.append(
+                    asyncio.to_thread(optimize_and_encode, frame["jpeg_bytes"], opts)
+                )
+                task_meta.append((label, "timelapse", frame["timestamp_s"]))
+        else:
+            raise ValueError(f"Unknown camera input kind: {kind!r}")
+
     results = await asyncio.gather(*tasks)
-    
-    images = []
-    sizes_log = []
+
+    images: list[tuple[int, str, str, str]] = []
+    sizes_log: list[dict] = []
+    extracted_frames_payload: list[dict] = []
     idx = 1
-    
-    for i, pair in enumerate(camera_pairs):
-        before_url, before_size, before_meta = results[i*2]
-        after_url, after_size, after_meta = results[i*2 + 1]
-        camera_label = pair["camera_label"]
-        
-        images.append((idx, camera_label, "voor", before_url))
+    track_sizes: dict[str, dict] = {}
+
+    for (label, role_kind, timestamp_s), (data_url, size_str, meta) in zip(
+        task_meta, results
+    ):
+        if role_kind == "timelapse":
+            role = f"t={timestamp_s:.1f}"
+        else:
+            role = role_kind
+
+        images.append((idx, label, role, data_url))
+
+        if role_kind == "timelapse":
+            track_entry = track_sizes.setdefault(
+                label,
+                {"camera_label": label, "kind": "timelapse", "frames": []},
+            )
+            track_entry["frames"].append(
+                {
+                    "idx": idx,
+                    "timestamp_s": timestamp_s,
+                    "size": size_str,
+                    "compression": meta,
+                    "data_url": data_url,
+                }
+            )
+        elif role_kind == "voor":
+            track_sizes[label] = {
+                "camera_label": label,
+                "kind": "pair",
+                "before_size": size_str,
+                "before_compression": meta,
+            }
+        elif role_kind == "na":
+            entry = track_sizes.get(label, {"camera_label": label, "kind": "pair"})
+            entry["after_size"] = size_str
+            entry["after_compression"] = meta
+            track_sizes[label] = entry
+
         idx += 1
-        images.append((idx, camera_label, "na", after_url))
-        idx += 1
-        
-        sizes_log.append({
-            "camera_label": camera_label,
-            "before_size": before_size,
-            "after_size": after_size,
-            "before_compression": before_meta,
-            "after_compression": after_meta,
-        })
+
+    sizes_log = list(track_sizes.values())
+
+    extracted_frames_response = [
+        {
+            "camera_label": entry["camera_label"],
+            "frames": [
+                {
+                    "idx": frame["idx"],
+                    "timestamp_s": frame["timestamp_s"],
+                    "data_url": frame["data_url"],
+                }
+                for frame in entry.get("frames", [])
+            ],
+        }
+        for entry in sizes_log
+        if entry.get("kind") == "timelapse"
+    ]
 
     rlog.log_step("image_optimization", {"sizes": sizes_log, "compression_options": opts})
     rlog.add_timing("image_optimization", time.time() - t_start)
@@ -276,6 +332,7 @@ async def run_pipeline(
         "agent1_json": agent1.model_dump(),
         "evidence": evidence,
         "evidence_diagnostics": evidence_diagnostics,
+        "extracted_frames": extracted_frames_response,
     }
 
 
@@ -300,7 +357,9 @@ def _enforce_low_confidence(
         if bp.nummer not in low_posts:
             continue
 
-        if bp.open_punten is not None and low_warning.lower() not in " ".join(bp.open_punten).lower():
+        if bp.open_punten is None:
+            bp.open_punten = []
+        if low_warning.lower() not in " ".join(bp.open_punten).lower():
             bp.open_punten.append(low_warning)
 
         cameras_str = ", ".join(low_posts[bp.nummer])

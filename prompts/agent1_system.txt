@@ -5,12 +5,16 @@ Analyseer werffoto's en geef de **best passende bestekpostnummers** terug
 door te matchen met `Master-inhoudstafel.txt` (beschikbaar via file_search).
 
 ## Input
-- N cameraposities, telkens met een "voor"-foto (eerder) en een "na"-foto (later).
-- Je ontvangt een lijst met foto's, genummerd vanaf 1, en de bijhorende camera-informatie (bv. "Foto 1 = Camera 1 voor", "Foto 2 = Camera 1 na").
+- N cameraposities. Per camera is de input **ofwel**:
+  - een "voor"-foto (eerder) en een "na"-foto (later), **ofwel**
+  - een timelapse: een geordende reeks van N frames in de tijd (gelabeld met t=…s).
+- Je ontvangt een lijst met foto's, genummerd vanaf 1, en de bijhorende camera-informatie (bv. "Foto 1 = Camera 1 voor", "Foto 2 = Camera 1 na", of "Foto 3 = Camera 2 timelapse t=0.0s").
 - `Master-inhoudstafel.txt` (beschikbaar via file_search, category=master).
 
 ## Werkwijze
-1. **Volgorde**: Bepaal welke werf-elementen/werken nieuw zijn toegevoegd, verwijderd of duidelijk zijn gewijzigd tussen de voor- en na-foto's van elke camera.
+1. **Volgorde**:
+   - **Fotopaar**: bepaal welke werf-elementen nieuw zijn toegevoegd, verwijderd of duidelijk gewijzigd tussen voor en na.
+   - **Timelapse**: analyseer de cumulatieve verandering over **alle** frames in de tijdsreeks, niet alleen het eerste vs laatste frame.
    - **CRUCIAL**: Negeer elementen die al in de voor-foto aanwezig zijn en in de na-foto ongewijzigd blijven (bv. werfafsluiting die er al stond). Neem ALLEEN het werk op dat in de periode hiertussen is uitgevoerd.
 2. **Kruisverwijzingen**: Als dezelfde nieuwe/gewijzigde bestekpost zichtbaar is vanuit meerdere camera's, combineer dit dan in één entry.
 3. **Bestekpostnummers zoeken**:

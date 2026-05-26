@@ -41,6 +41,10 @@ OUTPUT_STORAGE_LABELS = {
         "camera_fallback": "Camera",
         "unknown_before": "(unknown before image)",
         "unknown_after": "(unknown after image)",
+        "timelapse": "timelapse",
+        "timelapse_video": "video",
+        "timelapse_frames": "extracted frames",
+        "unknown_video": "(unknown video)",
     },
     "walloon": {
         "uploaded_images_title": "Images téléchargées utilisées pour générer le rapport",
@@ -55,16 +59,22 @@ OUTPUT_STORAGE_LABELS = {
         "camera_fallback": "Caméra",
         "unknown_before": "(image avant inconnue)",
         "unknown_after": "(image après inconnue)",
+        "timelapse": "timelapse",
+        "timelapse_video": "vidéo",
+        "timelapse_frames": "images extraites",
+        "unknown_video": "(vidéo inconnue)",
     },
 }
 
 KB_MESSAGES = {
     "flemish": {
         "photo_line": "Foto {idx} = {camera} {role}",
+        "timelapse_photo_line": "Foto {idx} = {camera} timelapse t={timestamp}s",
         "roles": {"voor": "voor", "na": "na"},
         "analysis_instruction": (
-            "\nAnalyseer de overgang van 'voor' naar 'na' voor elke camera en geef de "
-            "bestekpostnummers terug in het gevraagde JSON-formaat. "
+            "\nAnalyseer de overgang van 'voor' naar 'na' voor elke camera met een fotopaar, "
+            "of de cumulatieve verandering over een timelapse-reeks (meerdere frames in de tijd). "
+            "Geef de bestekpostnummers terug in het gevraagde JSON-formaat. "
             "Meld uitsluitend het verschil (werk uitgevoerd in deze periode), geen inventaris van de reeds bestaande staat."
         ),
         "filter_prefix": (
@@ -87,10 +97,12 @@ KB_MESSAGES = {
     },
     "walloon": {
         "photo_line": "Photo {idx} = {camera} {role}",
+        "timelapse_photo_line": "Photo {idx} = {camera} timelapse t={timestamp}s",
         "roles": {"voor": "avant", "na": "après"},
         "analysis_instruction": (
-            "\nAnalysez la transition « avant » → « après » pour chaque caméra et renvoyez les "
-            "postes CCTB au format JSON demandé. "
+            "\nAnalysez la transition « avant » → « après » pour chaque caméra avec une paire de photos, "
+            "ou l'évolution cumulative sur une séquence timelapse (plusieurs images dans le temps). "
+            "Renvoyez les postes CCTB au format JSON demandé. "
             "Ne déclarez que le delta (travaux réalisés sur la période), pas l'état déjà existant."
         ),
         "filter_prefix": (
@@ -130,6 +142,7 @@ REPORT_LABELS = {
         "input": "## Input",
         "date_time": "- Datum/tijd: {datum}",
         "photo_pair": "- {label}: Foto {voor_idx} (voor) → Foto {na_idx} (na)",
+        "timelapse_track": "- {label} (timelapse): Foto {indices} → t={timestamps}",
         "overview_camera": "## Overzicht per camera",
         "no_posts": "- **{label}**: Geen bestekposten gedetecteerd",
         "camera_posts": "- **{label}**: {bps}",
@@ -156,6 +169,7 @@ REPORT_LABELS = {
         "input": "## Entrée",
         "date_time": "- Date/heure : {datum}",
         "photo_pair": "- {label} : Photo {voor_idx} (avant) → Photo {na_idx} (après)",
+        "timelapse_track": "- {label} (timelapse) : Photos {indices} → t={timestamps}",
         "overview_camera": "## Vue d'ensemble par caméra",
         "no_posts": "- **{label}** : Aucun poste CCTB détecté",
         "camera_posts": "- **{label}** : {bps}",

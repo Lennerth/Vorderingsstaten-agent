@@ -8,6 +8,11 @@ from pathlib import Path
 
 from openai import AsyncAzureOpenAI
 
+from app.config import (
+    DEFAULT_AZURE_API_VERSION,
+    DEFAULT_AZURE_DEPLOYMENT,
+    DEFAULT_AZURE_ENDPOINT,
+)
 from app.regions import PROMPT_FILES, VECTOR_STORE_ENV_KEYS, normalize_region
 
 _client: AsyncAzureOpenAI | None = None
@@ -15,21 +20,17 @@ _deployment: str | None = None
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-_DEFAULT_ENDPOINT = "https://aidalh.cognitiveservices.azure.com/"
-_DEFAULT_DEPLOYMENT = "gpt-5.4"
-_DEFAULT_API_VERSION = "2025-04-01-preview"
-
 
 def _azure_endpoint() -> str:
-    return os.getenv("AZURE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT).strip()
+    return os.getenv("AZURE_OPENAI_ENDPOINT", DEFAULT_AZURE_ENDPOINT).strip()
 
 
 def _azure_deployment() -> str:
-    return os.getenv("AZURE_OPENAI_DEPLOYMENT", _DEFAULT_DEPLOYMENT).strip()
+    return os.getenv("AZURE_OPENAI_DEPLOYMENT", DEFAULT_AZURE_DEPLOYMENT).strip()
 
 
 def _azure_api_version() -> str:
-    return os.getenv("AZURE_OPENAI_API_VERSION", _DEFAULT_API_VERSION).strip()
+    return os.getenv("AZURE_OPENAI_API_VERSION", DEFAULT_AZURE_API_VERSION).strip()
 
 
 def get_client() -> AsyncAzureOpenAI:

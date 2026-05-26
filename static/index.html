@@ -42,6 +42,13 @@
         .advanced-panel { margin-top: 10px; padding: 10px; border: 1px solid #eee; border-radius: 4px; background: #fff; }
         .advanced-panel.hidden { display: none; }
         .field-hint { font-size: 0.9em; color: #666; margin-top: 4px; }
+        .track-mode { margin: 10px 0; }
+        .track-mode label { margin-right: 15px; }
+        .pair-inputs, .timelapse-inputs { margin-top: 10px; }
+        .timelapse-inputs.hidden, .pair-inputs.hidden { display: none; }
+        .extracted-frames { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; }
+        .extracted-frames img { max-width: 120px; max-height: 90px; object-fit: cover; margin: 4px; border: 1px solid #ccc; border-radius: 4px; }
+        .frame-thumb { display: inline-block; text-align: center; font-size: 0.75em; color: #666; }
     </style>
 </head>
 <body>
@@ -118,6 +125,7 @@
         
         <div id="report-view">
             <div id="markdown-render" data-state="empty"><em data-i18n="emptyResult">Het resultaat verschijnt hier...</em></div>
+            <div id="extracted-frames-panel" class="extracted-frames" style="display:none;"></div>
         </div>
         
         <div id="json-view" style="display:none;">
@@ -132,22 +140,33 @@
             <input type="text" class="camera-label-input" placeholder="Label (bijv. Camera 1)" data-i18n-placeholder="cameraPlaceholder" required>
             <button type="button" class="danger remove-camera-btn" data-i18n="removeCamera">Verwijder</button>
         </div>
-        <label><strong data-i18n="beforePhoto">Foto Voor (Eerder):</strong></label><br>
-        <input type="file" class="before-file" accept="image/*" required><br>
-        <img class="preview before-preview"><br><br>
-
-        <label><strong data-i18n="afterPhoto">Foto Na (Later):</strong></label><br>
-        <input type="file" class="after-file" accept="image/*" required><br>
-        <img class="preview after-preview">
+        <div class="track-mode">
+            <label><input type="radio" class="track-kind" name="" value="pair" checked> <span data-i18n="trackPair">Foto paar (voor/na)</span></label>
+            <label><input type="radio" class="track-kind" name="" value="timelapse"> <span data-i18n="trackTimelapse">Timelapse video</span></label>
+        </div>
+        <div class="pair-inputs">
+            <label><strong data-i18n="beforePhoto">Foto Voor (Eerder):</strong></label><br>
+            <input type="file" class="before-file" accept="image/*"><br>
+            <img class="preview before-preview"><br><br>
+            <label><strong data-i18n="afterPhoto">Foto Na (Later):</strong></label><br>
+            <input type="file" class="after-file" accept="image/*"><br>
+            <img class="preview after-preview">
+        </div>
+        <div class="timelapse-inputs hidden">
+            <label><strong data-i18n="timelapseVideo">Timelapse video:</strong></label><br>
+            <input type="file" class="video-file" accept="video/mp4,video/quicktime"><br>
+            <p class="field-hint video-meta"></p>
+            <img class="preview video-preview">
+        </div>
     </div>
 </template>
 
 <script>
-    const MAX_PAIRS = 6;
+    let MAX_CAMERAS = 6;
     const UI_TEXT = {
         flemish: {
             pageTitle: 'Vorderingsstaat Generator',
-            uploadTitle: "Upload Foto's",
+            uploadTitle: "Upload Foto's / Timelapses",
             regionLabel: 'Regio / Région:',
             addCamera: '+ Camera toevoegen',
             bestekpostFilter: 'Bestekpost filter (optioneel):',
@@ -178,6 +197,11 @@
             removeCamera: 'Verwijder',
             beforePhoto: 'Foto Voor (Eerder):',
             afterPhoto: 'Foto Na (Later):',
+            trackPair: 'Foto paar (voor/na)',
+            trackTimelapse: 'Timelapse video',
+            timelapseVideo: 'Timelapse video:',
+            missingVideo: (label) => `Upload een timelapse video voor ${label}!`,
+            extractedFramesTitle: 'Geëxtraheerde frames (analyse door AI)',
             maxCameras: (max) => `Maximaal ${max} camera's toegestaan.`,
             missingPhotos: (label) => `Upload beide foto's voor ${label}!`,
             processing: (min, max) => `Bezig met verwerken... (dit kan ${min}-${max} sec duren)`,
@@ -188,7 +212,7 @@
         },
         walloon: {
             pageTitle: "Générateur d'état d'avancement",
-            uploadTitle: 'Télécharger les photos',
+            uploadTitle: 'Télécharger photos / timelapses',
             regionLabel: 'Région:',
             addCamera: '+ Ajouter une caméra',
             bestekpostFilter: 'Filtre poste CCTB (optionnel):',
@@ -219,6 +243,11 @@
             removeCamera: 'Supprimer',
             beforePhoto: 'Photo avant:',
             afterPhoto: 'Photo après:',
+            trackPair: 'Paire de photos (avant/après)',
+            trackTimelapse: 'Vidéo timelapse',
+            timelapseVideo: 'Vidéo timelapse :',
+            missingVideo: (label) => `Téléchargez une vidéo timelapse pour ${label} !`,
+            extractedFramesTitle: 'Images extraites (analysées par l’IA)',
             maxCameras: (max) => `${max} caméras maximum autorisées.`,
             missingPhotos: (label) => `Téléchargez les deux photos pour ${label} !`,
             processing: (min, max) => `Traitement en cours... (cela peut prendre ${min}-${max} sec)`,
@@ -307,6 +336,85 @@
         }
     }
 
+    function setupVideoPreview(inputElement, imgElement, metaElement) {
+        inputElement.addEventListener('change', () => {
+            const file = inputElement.files[0];
+            if (!file) {
+                imgElement.style.display = 'none';
+                imgElement.src = '';
+                metaElement.textContent = '';
+                return;
+            }
+            metaElement.textContent = `${file.name} (${(file.size / (1024 * 1024)).toFixed(1)} MB)`;
+            const url = URL.createObjectURL(file);
+            const video = document.createElement('video');
+            video.preload = 'metadata';
+            video.src = url;
+            video.onloadeddata = () => {
+                video.currentTime = Math.min(1, video.duration / 2 || 0);
+            };
+            video.onseeked = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.getContext('2d').drawImage(video, 0, 0);
+                imgElement.src = canvas.toDataURL('image/jpeg');
+                imgElement.style.display = 'block';
+                URL.revokeObjectURL(url);
+            };
+        });
+    }
+
+    function setupTrackMode(block) {
+        const radios = block.querySelectorAll('.track-kind');
+        const pairInputs = block.querySelector('.pair-inputs');
+        const timelapseInputs = block.querySelector('.timelapse-inputs');
+        const updateMode = () => {
+            const selected = block.querySelector('.track-kind:checked')?.value || 'pair';
+            pairInputs.classList.toggle('hidden', selected !== 'pair');
+            timelapseInputs.classList.toggle('hidden', selected !== 'timelapse');
+        };
+        radios.forEach(radio => radio.addEventListener('change', updateMode));
+        updateMode();
+    }
+
+    function getTrackKind(block) {
+        return block.querySelector('.track-kind:checked')?.value || 'pair';
+    }
+
+    function renderExtractedFrames(data, region) {
+        const panel = document.getElementById('extracted-frames-panel');
+        const frames = data.extracted_frames || [];
+        if (!frames.length) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            return;
+        }
+        panel.style.display = 'block';
+        let html = `<h4>${t('extractedFramesTitle', region)}</h4>`;
+        frames.forEach(track => {
+            html += `<p><strong>${track.camera_label}</strong></p><div>`;
+            (track.frames || []).forEach(frame => {
+                html += `<span class="frame-thumb"><img src="${frame.data_url}" alt="t=${frame.timestamp_s}s"><br>t=${frame.timestamp_s}s</span>`;
+            });
+            html += '</div>';
+        });
+        panel.innerHTML = html;
+    }
+
+    async function loadServerConfig() {
+        try {
+            const response = await fetch('/config');
+            if (response.ok) {
+                const cfg = await response.json();
+                if (cfg.max_cameras) {
+                    MAX_CAMERAS = cfg.max_cameras;
+                }
+            }
+        } catch (error) {
+            console.warn('Could not load server config', error);
+        }
+    }
     function setupPreview(inputElement, imgElement) {
         inputElement.addEventListener('change', () => {
             const file = inputElement.files[0];
@@ -329,8 +437,8 @@
         const currentBlocks = blocksContainer.querySelectorAll('.camera-block').length;
         const region = currentRegion();
         
-        if (currentBlocks >= MAX_PAIRS) {
-            alert(t('maxCameras', region)(MAX_PAIRS));
+        if (currentBlocks >= MAX_CAMERAS) {
+            alert(t('maxCameras', region)(MAX_CAMERAS));
             return;
         }
 
@@ -346,8 +454,19 @@
             delete labelInput.dataset.autoLabel;
         });
 
+        const radioName = `track-kind-${cameraCount}`;
+        block.querySelectorAll('.track-kind').forEach(radio => {
+            radio.name = radioName;
+        });
+
         setupPreview(block.querySelector('.before-file'), block.querySelector('.before-preview'));
         setupPreview(block.querySelector('.after-file'), block.querySelector('.after-preview'));
+        setupVideoPreview(
+            block.querySelector('.video-file'),
+            block.querySelector('.video-preview'),
+            block.querySelector('.video-meta'),
+        );
+        setupTrackMode(block);
 
         const removeBtn = block.querySelector('.remove-camera-btn');
         removeBtn.addEventListener('click', () => {
@@ -375,7 +494,7 @@
     function updateAddButton() {
         const blocks = document.querySelectorAll('.camera-block');
         const addBtn = document.getElementById('addCameraBtn');
-        addBtn.disabled = blocks.length >= MAX_PAIRS;
+        addBtn.disabled = blocks.length >= MAX_CAMERAS;
     }
 
     function switchTab(tabName) {
@@ -397,11 +516,13 @@
         });
     }
 
-    // Initialize first block
-    addCameraBlock();
-    applyLanguage();
-    checkRequiredUiElements();
-    updateCompressionAdvancedPanel();
+    // Initialize
+    loadServerConfig().then(() => {
+        addCameraBlock();
+        applyLanguage();
+        checkRequiredUiElements();
+        updateCompressionAdvancedPanel();
+    });
 
     document.getElementById('addCameraBtn').addEventListener('click', addCameraBlock);
     const compressionAdvanced = document.getElementById('compressionAdvanced');
@@ -421,31 +542,46 @@
         if (blocks.length === 0) return;
         const region = currentRegion();
         
-        if (blocks.length > MAX_PAIRS) {
-            alert(t('maxCameras', region)(MAX_PAIRS));
+        if (blocks.length > MAX_CAMERAS) {
+            alert(t('maxCameras', region)(MAX_CAMERAS));
             return;
         }
 
         const formData = new FormData();
-        const cameraLabels = [];
-        
+        const pairLabels = [];
+        const videoLabels = [];
+        const trackOrder = [];
+
         for (let i = 0; i < blocks.length; i++) {
             const block = blocks[i];
-            const beforeFile = block.querySelector('.before-file').files[0];
-            const afterFile = block.querySelector('.after-file').files[0];
             const label = block.querySelector('.camera-label-input').value.trim() || `${t('cameraDefault', region)} ${i + 1}`;
-            
-            if (!beforeFile || !afterFile) {
-                alert(t('missingPhotos', region)(label));
-                return;
+            const kind = getTrackKind(block);
+            trackOrder.push(kind);
+
+            if (kind === 'pair') {
+                const beforeFile = block.querySelector('.before-file').files[0];
+                const afterFile = block.querySelector('.after-file').files[0];
+                if (!beforeFile || !afterFile) {
+                    alert(t('missingPhotos', region)(label));
+                    return;
+                }
+                formData.append('before_images', beforeFile);
+                formData.append('after_images', afterFile);
+                pairLabels.push(label);
+            } else if (kind === 'timelapse') {
+                const videoFile = block.querySelector('.video-file').files[0];
+                if (!videoFile) {
+                    alert(t('missingVideo', region)(label));
+                    return;
+                }
+                formData.append('videos', videoFile);
+                videoLabels.push(label);
             }
-            
-            formData.append('before_images', beforeFile);
-            formData.append('after_images', afterFile);
-            cameraLabels.push(label);
         }
 
-        formData.append('camera_labels', JSON.stringify(cameraLabels));
+        formData.append('camera_labels', JSON.stringify(pairLabels));
+        formData.append('video_labels', JSON.stringify(videoLabels));
+        formData.append('track_order', JSON.stringify(trackOrder));
         formData.append('region', region);
         const bestekpostFilter = document.getElementById('bestekpostFilter').value.trim();
         if (bestekpostFilter) {
@@ -471,6 +607,9 @@
         statusDiv.textContent = t('processing', region)(blocks.length * 30, blocks.length * 60);
         document.getElementById('markdown-render').dataset.state = 'loading';
         document.getElementById('markdown-render').innerHTML = `<div class="spinner">${t('loading', region)}</div>`;
+        const framesPanel = document.getElementById('extracted-frames-panel');
+        framesPanel.style.display = 'none';
+        framesPanel.innerHTML = '';
 
         try {
             const response = await fetch('/progress-report', {
@@ -488,6 +627,7 @@
             // Render markdown
             document.getElementById('markdown-render').dataset.state = 'result';
             document.getElementById('markdown-render').innerHTML = marked.parse(data.markdown_report);
+            renderExtractedFrames(data, region);
             
             // Show JSON
             document.getElementById('json-content').textContent = JSON.stringify(data, null, 2);

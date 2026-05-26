@@ -29,22 +29,21 @@ from pathlib import Path
 from dotenv import load_dotenv, set_key
 from openai import AzureOpenAI
 
+from app.config import DEFAULT_AZURE_API_VERSION, DEFAULT_AZURE_ENDPOINT
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 BESTEK_DIR = PROJECT_ROOT / "BouwtechnischBestekWoningbouw_20151222_ytdo1q"
 CCTB_DIR = PROJECT_ROOT / "CCTB_01.13_docx"
 ENV_PATH = PROJECT_ROOT / ".env"
 
-_DEFAULT_ENDPOINT = "https://aidalh.cognitiveservices.azure.com/"
-_DEFAULT_INIT_KB_API_VERSION = "2025-04-01-preview"
-
 
 def _azure_endpoint() -> str:
-    return os.getenv("AZURE_OPENAI_ENDPOINT", _DEFAULT_ENDPOINT).strip()
+    return os.getenv("AZURE_OPENAI_ENDPOINT", DEFAULT_AZURE_ENDPOINT).strip()
 
 
 def _init_kb_api_version() -> str:
     return os.getenv(
-        "AZURE_OPENAI_INIT_KB_API_VERSION", _DEFAULT_INIT_KB_API_VERSION
+        "AZURE_OPENAI_INIT_KB_API_VERSION", DEFAULT_AZURE_API_VERSION
     ).strip()
 
 REGION_ENV_KEYS = {

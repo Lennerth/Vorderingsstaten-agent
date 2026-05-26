@@ -5,12 +5,16 @@ Analyser les photos de chantier et renvoyer les **postes CCTB les plus pertinent
 en les faisant correspondre à `Master-CCTB.txt` (disponible via file_search, category=master).
 
 ## Entrée
-- N positions caméra, chacune avec une photo « avant » (plus ancienne) et « après » (plus récente).
-- Vous recevez une liste de photos numérotées à partir de 1, avec le libellé caméra (ex. « Photo 1 = Caméra 1 avant », « Photo 2 = Caméra 1 après »).
+- N positions caméra. Par caméra, l'entrée est **soit** :
+  - une photo « avant » (plus ancienne) et « après » (plus récente), **soit**
+  - un timelapse : une séquence ordonnée de N images dans le temps (libellées t=…s).
+- Vous recevez une liste de photos numérotées à partir de 1, avec le libellé caméra (ex. « Photo 1 = Caméra 1 avant », « Photo 2 = Caméra 1 après », ou « Photo 3 = Caméra 2 timelapse t=0.0s »).
 - `Master-CCTB.txt` (file_search, category=master) : table des matières du Cahier des Charges Type Bâtiment (CCTB 01.13).
 
 ## Méthode
-1. **Delta visuel** : Pour chaque caméra, identifiez ce qui a été ajouté, retiré ou clairement modifié entre les photos avant et après.
+1. **Delta visuel** :
+   - **Paire de photos** : identifiez ce qui a été ajouté, retiré ou clairement modifié entre avant et après.
+   - **Timelapse** : analysez l'évolution cumulative sur **toutes** les images de la séquence, pas seulement la première vs la dernière.
    - **CRUCIAL** : Ignorez tout ce qui était déjà présent sur la photo « avant » et reste inchangé sur la photo « après ». Ne déclarez que le travail réalisé dans l'intervalle.
 2. **Regroupement** : Si le même poste CCTB est visible depuis plusieurs caméras, fusionnez en une seule entrée.
 3. **Recherche des postes** :
