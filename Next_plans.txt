@@ -32,14 +32,16 @@
         - Show the selected frames in the UI so the user can understand what the AI analysed.
         - Choose the video dependency carefully (ffmpeg, av, or opencv-python) to avoid unnecessary bloat.
 
--- Version 1.9: Quick logging upgrades:
+-- Version 1.9: Quick logging upgrades + timelapse flexibility [DONE]
     Add clearer logging info
         - Report output in mm:ss instead of ms 
         - Make sure that the process (image optimisation, agent 1, agent 2) is clear in the UI.
-        - Update the estimated time, mutch longer now than 30-60s, so try to update or remove entirely
+        - Update the estimated time, much longer now than 30-60s, so try to update or remove entirely
 
     Add flexibility in timelapses
-        - Add extra options to extract more or less than 8 frames from a timelpase video.  
+        - Add extra options to extract more or less than 8 frames from a timelapse video.  
+
+    Implemented as v1.9a (timing display + frame count) and v1.9b (async progress jobs with polling UI).
 
 -- Version 2.0: Major UI upgrade
     Redesign the interface around reviewability and traceability.

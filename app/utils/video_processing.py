@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 _DEFAULTS = {
     "max_duration_s": 120,
     "max_file_mb": 200,
-    "max_frames": 8,
+    "max_frames": 16,
+    "default_frames": 8,
     "accepted_mime": "video/mp4,video/quicktime",
     "accepted_ext": ".mp4,.mov",
 }
@@ -92,6 +93,7 @@ class VideoLimits:
     max_duration_s: int
     max_file_mb: int
     max_frames: int
+    default_frames: int
     accepted_mime: tuple[str, ...]
     accepted_ext: tuple[str, ...]
 
@@ -105,6 +107,23 @@ class ExtractedFrame:
 def get_video_limits() -> VideoLimits:
     global _limits_cache
     if _limits_cache is None:
+        max_frames = _parse_int_env(
+            "VIDEO_MAX_FRAMES",
+            _DEFAULTS["max_frames"],
+            min_val=2,
+        )
+        default_frames = _parse_int_env(
+            "VIDEO_DEFAULT_FRAMES",
+            _DEFAULTS["default_frames"],
+            min_val=2,
+        )
+        if default_frames > max_frames:
+            _warn_once(
+                "VIDEO_DEFAULT_FRAMES",
+                f"VIDEO_DEFAULT_FRAMES={default_frames} exceeds VIDEO_MAX_FRAMES={max_frames}; "
+                f"using {max_frames} as default.",
+            )
+            default_frames = max_frames
         _limits_cache = VideoLimits(
             max_duration_s=_parse_int_env(
                 "VIDEO_MAX_DURATION_S",
@@ -116,11 +135,8 @@ def get_video_limits() -> VideoLimits:
                 _DEFAULTS["max_file_mb"],
                 min_val=1,
             ),
-            max_frames=_parse_int_env(
-                "VIDEO_MAX_FRAMES",
-                _DEFAULTS["max_frames"],
-                min_val=1,
-            ),
+            max_frames=max_frames,
+            default_frames=default_frames,
             accepted_mime=_parse_csv_env(
                 "VIDEO_ACCEPTED_MIME",
                 _DEFAULTS["accepted_mime"],
@@ -131,6 +147,18 @@ def get_video_limits() -> VideoLimits:
             ),
         )
     return _limits_cache
+
+
+def validate_frame_count(count: int) -> int:
+    """Clamp and validate a requested frame count against server limits."""
+    limits = get_video_limits()
+    if count < 2:
+        raise ValueError(f"Frame count must be at least 2 (got {count}).")
+    if count > limits.max_frames:
+        raise ValueError(
+            f"Frame count {count} exceeds server maximum of {limits.max_frames}."
+        )
+    return count
 
 
 def validate_video_upload(filename: str, content_type: str, size_bytes: int) -> None:
@@ -258,8 +286,8 @@ def extract_frames(
 ) -> list[ExtractedFrame]:
     """Extract representative JPEG frames: first, last, and uniform spacing."""
     limits = get_video_limits()
-    n_frames = max_frames if max_frames is not None else limits.max_frames
-    n_frames = min(n_frames, limits.max_frames)
+    n_frames = max_frames if max_frames is not None else limits.default_frames
+    n_frames = validate_frame_count(n_frames)
 
     probe = probe_video(video_bytes)
     validate_video_metadata(probe)

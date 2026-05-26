@@ -167,7 +167,8 @@ from a `.env` file at the project root via `python-dotenv`.
 | `UPLOAD_MAX_PAIRS` | no | `6` | Maximum number of camera tracks (pairs + timelapses) per request. |
 | `VIDEO_MAX_DURATION_S` | no | `120` | Maximum timelapse duration in seconds (enforced after decode). |
 | `VIDEO_MAX_FILE_MB` | no | `200` | Maximum timelapse upload size in MB. |
-| `VIDEO_MAX_FRAMES` | no | `8` | Maximum frames extracted per timelapse (first + last + uniform spacing). |
+| `VIDEO_MAX_FRAMES` | no | `16` | Maximum frames extracted per timelapse (server ceiling). |
+| `VIDEO_DEFAULT_FRAMES` | no | `8` | Default frame count when the UI/API does not override it. |
 | `VIDEO_ACCEPTED_MIME` | no | `video/mp4,video/quicktime` | Comma-separated allowed video MIME types. |
 | `VIDEO_ACCEPTED_EXT` | no | `.mp4,.mov` | Comma-separated allowed video extensions. |
 | `COMPRESSION_PRESET_LOW_QUALITY` | no | `90` | JPEG quality for UI preset `low`. |
@@ -210,6 +211,29 @@ The API accepts mixed tracks in one request:
 If `track_order` is omitted, all pair tracks are processed before timelapse
 tracks. Extracted frames are returned in `extracted_frames` and saved under
 `outputs/<run>/frames/<camera>/` for review.
+
+Per-request frame counts can be supplied via `video_frame_counts` (JSON array
+aligned with `videos[]`). Values must be between 2 and `VIDEO_MAX_FRAMES`.
+
+### Logging and progress (v1.9)
+
+- **Timing display:** JSONL logs and API responses include human-readable
+  `mm:ss` durations (`elapsed_display`, `timings_display`) alongside numeric
+  seconds.
+- **Timelapse frame controls:** the UI exposes a per-timelapse frame count
+  input (default 8, max 16). More frames may increase runtime and model cost.
+- **Live progress jobs:** the browser UI submits to `POST /progress-report/jobs`
+  and polls `GET /progress/{request_id}` for step-by-step status. The existing
+  synchronous `POST /progress-report` endpoint remains available for API callers.
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /progress-report/jobs` | Start an async report job; returns `202` with `request_id`. |
+| `GET /progress/{request_id}` | Poll job status, step progress, and final result when complete. |
+| `POST /progress-report` | Synchronous report generation (unchanged behaviour for integrations). |
+
+Optional env vars: `PROGRESS_JOB_TTL_S` (default 3600), `PROGRESS_MAX_CONCURRENT`
+(default 1).
 
 ### UI compression controls (v1.7d)
 
@@ -480,7 +504,9 @@ Every request writes a JSONL trace to `logs/<YYYY-MM-DD>.jsonl`
 - `agent2_raw_output` with the raw JSON returned by Agent 2,
 - `agent2_retry` (only when a retry occurred) with the validation error,
 - `agent1_usage` / `agent1_retry_usage` and `agent2_usage` / `agent2_retry_usage` with per-call latency and token counts (`input_tokens`, `output_tokens`, `total_tokens`, `reasoning_tokens`, plus a best-effort `raw_usage` dump),
-- a final `summary` entry with elapsed time per step, aggregated `tokens` totals, and the overall request duration.
+- a final `summary` entry with elapsed time per step (`timings` in seconds,
+  `timings_display` in `mm:ss`), aggregated `tokens` totals, and the overall
+  request duration.
 
 The trace files are plain JSON Lines: one JSON object per line, safe to
 `cat`, `tail -f`, or ingest into any log aggregator that understands

@@ -7,6 +7,7 @@ import copy
 import logging
 import re
 import time
+from collections.abc import Callable
 
 from app.kb import (
     enrich_evidence_with_provenance_fallback,
@@ -14,7 +15,7 @@ from app.kb import (
     run_agent2,
     summarize_evidence_items,
 )
-from app.logging_utils import RequestLogger
+from app.logging_utils import RequestLogger, format_timings_display
 from app.models import Agent1Output, Agent2Output
 from app.openai_client import load_region_prompt, load_schema
 from app.regions import (
@@ -51,13 +52,19 @@ async def run_pipeline(
     report_fields: list[str] | None = None,
     region: str = "flemish",
     compression_options: dict | None = None,
+    progress_callback: Callable[..., None] | None = None,
 ) -> dict:
     region = normalize_region(region)
     rlog = RequestLogger(request_id)
     t_start = time.time()
     rlog.log_step("region", {"region": region})
 
+    def _progress(step_id: str, status: str, **extra):
+        if progress_callback:
+            progress_callback(step_id, status, **extra)
+
     # ── 1. Image optimisation ────────────────────────────────────────────
+    _progress("image_optimization", "running")
     opts = compression_options or {}
     logger.info(
         "[%s] Optimizing images for %d camera track(s) (compression mode=%s preset=%s quality=%s target_mb=%s) …",
@@ -156,8 +163,10 @@ async def run_pipeline(
 
     rlog.log_step("image_optimization", {"sizes": sizes_log, "compression_options": opts})
     rlog.add_timing("image_optimization", time.time() - t_start)
+    _progress("image_optimization", "done", duration_s=time.time() - t_start)
 
     # ── 2. Agent 1: vision + master file_search ──────────────────────────
+    _progress("agent1", "running")
     logger.info("[%s] Running Agent 1 …", request_id)
     t1 = time.time()
     parsed_filters = _parse_bestekpost_filters(bestekpost_filter or [])
@@ -205,6 +214,7 @@ async def run_pipeline(
 
     rlog.log_step("agent1_retrieval", {"hits": len(agent1_annotations)})
     rlog.add_timing("agent1", time.time() - t1)
+    _progress("agent1", "done", duration_s=time.time() - t1)
     total_posts = len(agent1.bestekposten)
     logger.info("[%s] Agent 1 returned %d bestekposten", request_id, total_posts)
 
@@ -213,6 +223,7 @@ async def run_pipeline(
     # client.vector_stores.search() directly. We let Agent 2 do it.
 
     # ── 4. Agent 2: enrichment ───────────────────────────────────────────
+    _progress("agent2", "running")
     logger.info("[%s] Running Agent 2 (with file_search) …", request_id)
     t3 = time.time()
     selected_report_fields = set(
@@ -269,6 +280,7 @@ async def run_pipeline(
         },
     )
 
+    _preserve_visual_references(agent1, agent2)
     _enforce_low_confidence(agent1, agent2, region)
     
     # Sort agent2 bestekposten by nummer before rendering
@@ -278,13 +290,17 @@ async def run_pipeline(
     _merge_duplicates(agent2)
 
     rlog.add_timing("agent2", time.time() - t3)
+    _progress("agent2", "done", duration_s=time.time() - t3)
 
     # ── 5. Render markdown ───────────────────────────────────────────────
+    _progress("report_generation", "running")
+    t_report = time.time()
     markdown = render_markdown(agent2, images, region=region)
 
     total_time = time.time() - t_start
     rlog.add_timing("total", total_time)
-    logger.info("[%s] Pipeline complete in %.1f s", request_id, total_time)
+    _progress("report_generation", "done", duration_s=time.time() - t_report)
+    logger.info("[%s] Pipeline complete in %s", request_id, format_timings_display({"total": total_time})["total"])
 
     rlog.log_step("pipeline_complete", {"total_s": round(total_time, 2)})
     agent1_quality = summarize_evidence_items(agent1_annotations)
@@ -327,12 +343,15 @@ async def run_pipeline(
     }
 
     return {
+        "request_id": request_id,
         "markdown_report": markdown,
         "agent2_json": agent2.model_dump(exclude_none=True),
         "agent1_json": agent1.model_dump(),
         "evidence": evidence,
         "evidence_diagnostics": evidence_diagnostics,
         "extracted_frames": extracted_frames_response,
+        "timings": rlog.timings,
+        "timings_display": format_timings_display(rlog.timings),
     }
 
 
@@ -401,6 +420,26 @@ def _merge_duplicates(agent2: Agent2Output) -> None:
                     
     agent2.bestekposten = list(merged.values())
     agent2.bestekposten.sort(key=lambda x: x.nummer)
+
+
+def _preserve_visual_references(agent1: Agent1Output, agent2: Agent2Output) -> None:
+    """Keep photo indices and camera labels from Agent 1 as source-of-truth."""
+    refs_by_nummer = {
+        bp.nummer: {
+            "camera_labels": bp.camera_labels,
+            "image_indices": bp.image_indices,
+        }
+        for bp in agent1.bestekposten
+    }
+
+    for bp in agent2.bestekposten:
+        refs = refs_by_nummer.get(bp.nummer)
+        if not refs:
+            continue
+        if not bp.camera_labels:
+            bp.camera_labels = list(refs["camera_labels"])
+        if not bp.image_indices:
+            bp.image_indices = list(refs["image_indices"])
 
 
 def _parse_bestekpost_filters(filters: list[str]) -> list[dict]:

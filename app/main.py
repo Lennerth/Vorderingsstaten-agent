@@ -19,9 +19,19 @@ logging.basicConfig(
     stream=sys.stdout,
 )
 
+
+class SuppressProgressPollFilter(logging.Filter):
+    """Hide noisy progress polling access logs while keeping app milestones visible."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return '"GET /progress/' not in record.getMessage()
+
+
+logging.getLogger("uvicorn.access").addFilter(SuppressProgressPollFilter())
+
 app = FastAPI(
     title="Vorderingsstaten Agent API",
-    version="1.8",
+    version="1.9",
     description="Automated progress-report generation from construction site photos and timelapses.",
 )
 

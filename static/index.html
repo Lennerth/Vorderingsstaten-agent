@@ -49,6 +49,17 @@
         .extracted-frames { margin-top: 20px; padding-top: 15px; border-top: 1px solid #ddd; }
         .extracted-frames img { max-width: 120px; max-height: 90px; object-fit: cover; margin: 4px; border: 1px solid #ccc; border-radius: 4px; }
         .frame-thumb { display: inline-block; text-align: center; font-size: 0.75em; color: #666; }
+        .progress-panel { margin-top: 12px; padding: 12px; border: 1px solid #ddd; border-radius: 4px; background: #fff; }
+        .progress-panel.hidden { display: none; }
+        .progress-step { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 0.95em; }
+        .progress-step.pending { color: #999; }
+        .progress-step.running { color: #007bff; font-weight: 600; }
+        .progress-step.done { color: #155724; }
+        .progress-step.error { color: #721c24; }
+        .progress-elapsed { margin-top: 8px; font-size: 0.9em; color: #666; }
+        .timings-summary { margin-top: 10px; font-size: 0.9em; color: #444; }
+        .frame-count-row { margin-top: 8px; }
+        .frame-count-row input { width: 80px; }
     </style>
 </head>
 <body>
@@ -115,6 +126,11 @@
             <button type="submit" id="submitBtn" style="width: 100%; font-size: 18px; padding: 15px;" data-i18n="submit">Genereer Rapport</button>
         </form>
         <div id="status"></div>
+        <div id="progress-panel" class="progress-panel hidden">
+            <div id="progress-steps"></div>
+            <div id="progress-elapsed" class="progress-elapsed"></div>
+            <div id="timings-summary" class="timings-summary"></div>
+        </div>
     </div>
 
     <div class="preview-section">
@@ -156,6 +172,11 @@
             <label><strong data-i18n="timelapseVideo">Timelapse video:</strong></label><br>
             <input type="file" class="video-file" accept="video/mp4,video/quicktime"><br>
             <p class="field-hint video-meta"></p>
+            <div class="frame-count-row">
+                <label><span data-i18n="frameCountLabel">Aantal frames:</span></label>
+                <input type="number" class="frame-count-input" min="2" max="16" step="1" value="8">
+                <p class="field-hint" data-i18n="frameCountHint">Meer frames kunnen de verwerkingstijd en kosten verhogen.</p>
+            </div>
             <img class="preview video-preview">
         </div>
     </div>
@@ -163,6 +184,16 @@
 
 <script>
     let MAX_CAMERAS = 6;
+    let VIDEO_DEFAULT_FRAMES = 8;
+    let VIDEO_MAX_FRAMES = 16;
+    const STEP_ORDER = [
+        'upload_validation',
+        'video_extraction',
+        'image_optimization',
+        'agent1',
+        'agent2',
+        'report_generation',
+    ];
     const UI_TEXT = {
         flemish: {
             pageTitle: 'Vorderingsstaat Generator',
@@ -201,14 +232,28 @@
             trackTimelapse: 'Timelapse video',
             timelapseVideo: 'Timelapse video:',
             missingVideo: (label) => `Upload een timelapse video voor ${label}!`,
-            extractedFramesTitle: 'Geëxtraheerde frames (analyse door AI)',
+            extractedFramesTitle: 'Frames geëxtraheerd uit timelapsevideo',
             maxCameras: (max) => `Maximaal ${max} camera's toegestaan.`,
             missingPhotos: (label) => `Upload beide foto's voor ${label}!`,
-            processing: (min, max) => `Bezig met verwerken... (dit kan ${min}-${max} sec duren)`,
+            processing: 'Bezig met verwerken... dit kan enkele minuten duren.',
             loading: 'Laden...',
             done: 'Klaar!',
             errorPrefix: 'Fout: ',
             genericError: 'Er is een fout opgetreden.',
+            frameCountLabel: 'Aantal frames:',
+            frameCountHint: 'Meer frames kunnen de verwerkingstijd en kosten verhogen.',
+            elapsedLabel: 'Verstreken tijd:',
+            timingsTitle: 'Stapduur:',
+            stepUploadValidation: 'Upload validatie',
+            stepVideoExtraction: 'Video frame extractie',
+            stepImageOptimization: 'Beeldoptimalisatie',
+            stepAgent1: 'Agent 1 – analyse',
+            stepAgent2: 'Agent 2 – verrijking',
+            stepReportGeneration: 'Rapport genereren',
+            stepPending: 'wachten',
+            stepRunning: 'bezig',
+            stepDone: 'klaar',
+            stepError: 'fout',
         },
         walloon: {
             pageTitle: "Générateur d'état d'avancement",
@@ -247,14 +292,28 @@
             trackTimelapse: 'Vidéo timelapse',
             timelapseVideo: 'Vidéo timelapse :',
             missingVideo: (label) => `Téléchargez une vidéo timelapse pour ${label} !`,
-            extractedFramesTitle: 'Images extraites (analysées par l’IA)',
+            extractedFramesTitle: 'Images extraites de la vidéo timelapse',
             maxCameras: (max) => `${max} caméras maximum autorisées.`,
             missingPhotos: (label) => `Téléchargez les deux photos pour ${label} !`,
-            processing: (min, max) => `Traitement en cours... (cela peut prendre ${min}-${max} sec)`,
+            processing: 'Traitement en cours... cela peut prendre plusieurs minutes.',
             loading: 'Chargement...',
             done: 'Terminé !',
             errorPrefix: 'Erreur : ',
             genericError: "Une erreur s'est produite.",
+            frameCountLabel: "Nombre d'images :",
+            frameCountHint: "Plus d'images peuvent augmenter le temps de traitement et le coût.",
+            elapsedLabel: 'Temps écoulé :',
+            timingsTitle: 'Durée par étape :',
+            stepUploadValidation: 'Validation du téléversement',
+            stepVideoExtraction: 'Extraction des images vidéo',
+            stepImageOptimization: 'Optimisation des images',
+            stepAgent1: 'Agent 1 – analyse',
+            stepAgent2: 'Agent 2 – enrichissement',
+            stepReportGeneration: 'Génération du rapport',
+            stepPending: 'en attente',
+            stepRunning: 'en cours',
+            stepDone: 'terminé',
+            stepError: 'erreur',
         },
     };
 
@@ -402,6 +461,105 @@
         panel.innerHTML = html;
     }
 
+    function formatDurationMmSs(totalSeconds) {
+        const total = Math.max(0, Math.round(totalSeconds));
+        const minutes = Math.floor(total / 60);
+        const seconds = total % 60;
+        return `${minutes}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    function stepLabel(stepId, region = currentRegion()) {
+        const map = {
+            upload_validation: 'stepUploadValidation',
+            video_extraction: 'stepVideoExtraction',
+            image_optimization: 'stepImageOptimization',
+            agent1: 'stepAgent1',
+            agent2: 'stepAgent2',
+            report_generation: 'stepReportGeneration',
+        };
+        return t(map[stepId] || stepId, region);
+    }
+
+    function statusLabel(status, region = currentRegion()) {
+        const map = {
+            pending: 'stepPending',
+            running: 'stepRunning',
+            done: 'stepDone',
+            error: 'stepError',
+        };
+        return t(map[status] || status, region);
+    }
+
+    function renderProgressSteps(steps, region = currentRegion()) {
+        const container = document.getElementById('progress-steps');
+        if (!container) return;
+        const stepMap = Object.fromEntries((steps || []).map(step => [step.id, step]));
+        container.innerHTML = STEP_ORDER.map(stepId => {
+            const step = stepMap[stepId] || { id: stepId, status: 'pending' };
+            const duration = step.duration_display ? ` (${step.duration_display})` : '';
+            const elapsed = step.elapsed_display ? ` (${step.elapsed_display})` : '';
+            const suffix = step.status === 'done' ? duration : (step.status === 'running' ? elapsed : '');
+            return `<div class="progress-step ${step.status}"><span>${stepLabel(stepId, region)}</span><span>${statusLabel(step.status, region)}${suffix}</span></div>`;
+        }).join('');
+    }
+
+    function showProgressPanel(region = currentRegion()) {
+        const panel = document.getElementById('progress-panel');
+        if (!panel) return;
+        panel.classList.remove('hidden');
+        renderProgressSteps(
+            STEP_ORDER.map(stepId => ({ id: stepId, status: 'pending' })),
+            region,
+        );
+        document.getElementById('timings-summary').textContent = '';
+    }
+
+    function hideProgressPanel() {
+        const panel = document.getElementById('progress-panel');
+        if (panel) panel.classList.add('hidden');
+    }
+
+    function renderTimingsSummary(data, region = currentRegion()) {
+        const summary = document.getElementById('timings-summary');
+        if (!summary || !data.timings_display) return;
+        const parts = Object.entries(data.timings_display).map(
+            ([label, value]) => `${label}: ${value}`,
+        );
+        summary.textContent = `${t('timingsTitle', region)} ${parts.join(' · ')}`;
+    }
+
+    function applyVideoFrameConfig(root = document) {
+        root.querySelectorAll('.frame-count-input').forEach(input => {
+            input.min = 2;
+            input.max = VIDEO_MAX_FRAMES;
+            if (!input.dataset.userEdited) {
+                input.value = VIDEO_DEFAULT_FRAMES;
+            }
+        });
+    }
+
+    async function pollProgress(requestId, region, onTick) {
+        while (true) {
+            const response = await fetch(`/progress/${requestId}`);
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                throw new Error(err.detail || 'Progress polling failed');
+            }
+            const progress = await response.json();
+            renderProgressSteps(progress.steps || [], region);
+            if (typeof onTick === 'function') {
+                onTick(progress);
+            }
+            if (progress.status === 'complete') {
+                return progress.result;
+            }
+            if (progress.status === 'error') {
+                throw new Error(progress.error || t('genericError', region));
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+
     async function loadServerConfig() {
         try {
             const response = await fetch('/config');
@@ -410,6 +568,13 @@
                 if (cfg.max_cameras) {
                     MAX_CAMERAS = cfg.max_cameras;
                 }
+                if (cfg.video_default_frames) {
+                    VIDEO_DEFAULT_FRAMES = cfg.video_default_frames;
+                }
+                if (cfg.video_max_frames) {
+                    VIDEO_MAX_FRAMES = cfg.video_max_frames;
+                }
+                applyVideoFrameConfig();
             }
         } catch (error) {
             console.warn('Could not load server config', error);
@@ -467,6 +632,14 @@
             block.querySelector('.video-meta'),
         );
         setupTrackMode(block);
+
+        const frameCountInput = block.querySelector('.frame-count-input');
+        if (frameCountInput) {
+            frameCountInput.addEventListener('input', () => {
+                frameCountInput.dataset.userEdited = 'true';
+            });
+            applyVideoFrameConfig(block);
+        }
 
         const removeBtn = block.querySelector('.remove-camera-btn');
         removeBtn.addEventListener('click', () => {
@@ -550,6 +723,7 @@
         const formData = new FormData();
         const pairLabels = [];
         const videoLabels = [];
+        const videoFrameCounts = [];
         const trackOrder = [];
 
         for (let i = 0; i < blocks.length; i++) {
@@ -574,13 +748,21 @@
                     alert(t('missingVideo', region)(label));
                     return;
                 }
+                const frameCountInput = block.querySelector('.frame-count-input');
+                const frameCount = parseInt(frameCountInput?.value || VIDEO_DEFAULT_FRAMES, 10);
+                if (Number.isNaN(frameCount) || frameCount < 2 || frameCount > VIDEO_MAX_FRAMES) {
+                    alert(`${t('frameCountLabel', region)} 2-${VIDEO_MAX_FRAMES}`);
+                    return;
+                }
                 formData.append('videos', videoFile);
                 videoLabels.push(label);
+                videoFrameCounts.push(frameCount);
             }
         }
 
         formData.append('camera_labels', JSON.stringify(pairLabels));
         formData.append('video_labels', JSON.stringify(videoLabels));
+        formData.append('video_frame_counts', JSON.stringify(videoFrameCounts));
         formData.append('track_order', JSON.stringify(trackOrder));
         formData.append('region', region);
         const bestekpostFilter = document.getElementById('bestekpostFilter').value.trim();
@@ -604,34 +786,46 @@
         // Disable remove buttons during upload
         document.querySelectorAll('.remove-camera-btn').forEach(btn => btn.disabled = true);
         
-        statusDiv.textContent = t('processing', region)(blocks.length * 30, blocks.length * 60);
+        statusDiv.textContent = t('processing', region);
+        showProgressPanel(region);
         document.getElementById('markdown-render').dataset.state = 'loading';
         document.getElementById('markdown-render').innerHTML = `<div class="spinner">${t('loading', region)}</div>`;
         const framesPanel = document.getElementById('extracted-frames-panel');
         framesPanel.style.display = 'none';
         framesPanel.innerHTML = '';
 
+        const elapsedDiv = document.getElementById('progress-elapsed');
+        const startedAt = Date.now();
+        const elapsedTimer = setInterval(() => {
+            const elapsedSeconds = (Date.now() - startedAt) / 1000;
+            elapsedDiv.textContent = `${t('elapsedLabel', region)} ${formatDurationMmSs(elapsedSeconds)}`;
+        }, 1000);
+        elapsedDiv.textContent = `${t('elapsedLabel', region)} 0:00`;
+
         try {
-            const response = await fetch('/progress-report', {
+            const response = await fetch('/progress-report/jobs', {
                 method: 'POST',
                 body: formData
             });
+
+            if (response.status === 409) {
+                const err = await response.json();
+                throw new Error(err.detail || 'Another job is running');
+            }
 
             if (!response.ok) {
                 const err = await response.json();
                 throw new Error(err.detail || 'Server error');
             }
 
-            const data = await response.json();
-            
-            // Render markdown
+            const job = await response.json();
+            const data = await pollProgress(job.request_id, region);
+
             document.getElementById('markdown-render').dataset.state = 'result';
             document.getElementById('markdown-render').innerHTML = marked.parse(data.markdown_report);
             renderExtractedFrames(data, region);
-            
-            // Show JSON
             document.getElementById('json-content').textContent = JSON.stringify(data, null, 2);
-            
+            renderTimingsSummary(data, region);
             statusDiv.textContent = t('done', region);
         } catch (error) {
             console.error(error);
@@ -639,6 +833,7 @@
             document.getElementById('markdown-render').dataset.state = 'error';
             document.getElementById('markdown-render').innerHTML = `<span style="color:red">${t('genericError', region)}</span>`;
         } finally {
+            clearInterval(elapsedTimer);
             submitBtn.disabled = false;
             updateAddButton();
             updateRemoveButtons();

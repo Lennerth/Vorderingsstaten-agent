@@ -5,15 +5,23 @@ from __future__ import annotations
 import json
 import logging
 import os
+from dataclasses import dataclass
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
 
 from app.logging_utils import generate_request_id
 from app.output_storage import save_report_output
 from app.orchestrator import InvalidBestekpostFilter, run_pipeline
+from app.progress import STEP_IDS, progress_store
 from app.regions import normalize_region
 from app.utils.system_monitor import check_resources
-from app.utils.video_processing import extract_frames, validate_video_upload
+from app.utils.video_processing import (
+    extract_frames,
+    get_video_limits,
+    validate_frame_count,
+    validate_video_upload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +138,21 @@ PRESET_COMPRESSION = {
 }
 
 
+@dataclass
+class PreparedReportRequest:
+    request_id: str
+    region: str
+    order: list[str]
+    pair_labels: list[str]
+    video_label_list: list[str]
+    pair_inputs: list[tuple[bytes, bytes, str, str]]
+    video_inputs: list[tuple[bytes, str, str]]
+    video_frame_counts: list[int]
+    bestekpost_filters: list[str] | None
+    selected_report_fields: list[str]
+    compression_options: dict
+
+
 def _truthy(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
@@ -203,6 +226,32 @@ def _parse_json_list(raw: str, field_name: str) -> list:
     return parsed
 
 
+def _parse_video_frame_counts(raw: str, n_videos: int) -> list[int]:
+    limits = get_video_limits()
+    parsed = _parse_json_list(raw, "video_frame_counts")
+    if not parsed:
+        return [limits.default_frames] * n_videos
+    if len(parsed) != n_videos:
+        raise HTTPException(
+            400,
+            "video_frame_counts length must match the number of videos.",
+        )
+    counts: list[int] = []
+    for index, item in enumerate(parsed):
+        try:
+            count = int(item)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                400,
+                f"video_frame_counts[{index}] must be an integer.",
+            ) from exc
+        try:
+            counts.append(validate_frame_count(count))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return counts
+
+
 def _build_camera_inputs(
     *,
     track_order: list[str],
@@ -210,6 +259,8 @@ def _build_camera_inputs(
     video_labels: list[str],
     pair_inputs: list[tuple[bytes, bytes, str, str]],
     video_inputs: list[tuple[bytes, str, str]],
+    video_frame_counts: list[int],
+    progress_callback=None,
 ) -> tuple[list[dict], list[dict]]:
     """Build ordered camera_inputs and upload metadata for storage."""
     camera_inputs: list[dict] = []
@@ -249,10 +300,17 @@ def _build_camera_inputs(
                 if video_idx < len(video_labels)
                 else f"Camera {video_idx + 1}"
             )
+            frame_count = video_frame_counts[video_idx] if video_idx < len(video_frame_counts) else get_video_limits().default_frames
+            if progress_callback:
+                progress_callback("video_extraction", "running")
             try:
-                extracted = extract_frames(video_bytes)
+                extracted = extract_frames(video_bytes, max_frames=frame_count)
             except ValueError as exc:
+                if progress_callback:
+                    progress_callback("video_extraction", "error")
                 raise HTTPException(400, str(exc)) from exc
+            if progress_callback:
+                progress_callback("video_extraction", "done")
             frames = [
                 {"timestamp_s": frame.timestamp_s, "jpeg_bytes": frame.jpeg_bytes}
                 for frame in extracted
@@ -289,38 +347,28 @@ def _build_camera_inputs(
     return camera_inputs, uploaded_tracks
 
 
-@router.get("/config")
-async def public_config():
-    """Expose server limits to the UI."""
-    return {
-        "max_cameras": MAX_CAMERAS,
-        "max_image_mb": MAX_IMAGE_MB,
-        "max_total_mb": MAX_TOTAL_MB,
-    }
-
-
-@router.post("/progress-report")
-async def progress_report(
-    before_images: list[UploadFile] = File(default=[]),
-    after_images: list[UploadFile] = File(default=[]),
-    camera_labels: str = Form("[]"),
-    videos: list[UploadFile] = File(default=[]),
-    video_labels: str = Form("[]"),
-    track_order: str = Form("[]"),
-    bestekpost_filter: str = Form(""),
-    report_fields: str = Form(""),
-    region: str = Form("flemish"),
-    compression_preset: str = Form("medium"),
-    compression_advanced: str = Form(""),
-    jpeg_quality: str = Form(""),
-    target_image_mb: str = Form(""),
-):
-    request_id = generate_request_id()
-
+async def _prepare_report_request(
+    *,
+    request_id: str,
+    before_images: list[UploadFile],
+    after_images: list[UploadFile],
+    camera_labels: str,
+    videos: list[UploadFile],
+    video_labels: str,
+    video_frame_counts: str,
+    track_order: str,
+    bestekpost_filter: str,
+    report_fields: str,
+    region: str,
+    compression_preset: str,
+    compression_advanced: str,
+    jpeg_quality: str,
+    target_image_mb: str,
+) -> PreparedReportRequest:
     try:
         region = normalize_region(region)
     except ValueError as exc:
-        raise HTTPException(400, str(exc))
+        raise HTTPException(400, str(exc)) from exc
 
     n_pairs = len(before_images)
     n_videos = len(videos)
@@ -501,40 +549,204 @@ async def progress_report(
             f"Total upload size exceeds max size of {MAX_TOTAL_MB:g} MB.",
         )
 
-    camera_inputs, uploaded_tracks = _build_camera_inputs(
-        track_order=order,
+    frame_counts = _parse_video_frame_counts(video_frame_counts, n_videos)
+
+    return PreparedReportRequest(
+        request_id=request_id,
+        region=region,
+        order=order,
         pair_labels=pair_labels,
-        video_labels=video_label_list,
+        video_label_list=video_label_list,
         pair_inputs=pair_inputs,
         video_inputs=video_inputs,
+        video_frame_counts=frame_counts,
+        bestekpost_filters=bestekpost_filters,
+        selected_report_fields=selected_report_fields,
+        compression_options=compression_options,
+    )
+
+
+async def _execute_report(
+    prepared: PreparedReportRequest,
+    *,
+    progress_callback=None,
+) -> dict:
+    camera_inputs, uploaded_tracks = _build_camera_inputs(
+        track_order=prepared.order,
+        pair_labels=prepared.pair_labels,
+        video_labels=prepared.video_label_list,
+        pair_inputs=prepared.pair_inputs,
+        video_inputs=prepared.video_inputs,
+        video_frame_counts=prepared.video_frame_counts,
+        progress_callback=progress_callback,
     )
 
     try:
         result = await run_pipeline(
             camera_inputs,
-            request_id,
-            bestekpost_filter=bestekpost_filters,
-            report_fields=selected_report_fields,
-            region=region,
-            compression_options=compression_options,
+            prepared.request_id,
+            bestekpost_filter=prepared.bestekpost_filters,
+            report_fields=prepared.selected_report_fields,
+            region=prepared.region,
+            compression_options=prepared.compression_options,
+            progress_callback=progress_callback,
         )
     except InvalidBestekpostFilter as exc:
-        raise HTTPException(400, str(exc))
+        raise HTTPException(400, str(exc)) from exc
     except Exception:
-        logger.exception("[%s] Pipeline failed", request_id)
+        logger.exception("[%s] Pipeline failed", prepared.request_id)
         raise HTTPException(500, "Internal pipeline error – see server logs.")
 
     try:
         output_dir = save_report_output(
             result,
             uploaded_tracks,
-            report_fields=selected_report_fields,
-            bestekpost_filters=bestekpost_filters or [],
-            region=region,
+            report_fields=prepared.selected_report_fields,
+            bestekpost_filters=prepared.bestekpost_filters or [],
+            region=prepared.region,
         )
-        logger.info("[%s] Output artifacts saved to %s", request_id, output_dir)
+        logger.info("[%s] Output artifacts saved to %s", prepared.request_id, output_dir)
     except Exception:
-        logger.exception("[%s] Failed to store output artifacts", request_id)
+        logger.exception("[%s] Failed to store output artifacts", prepared.request_id)
         raise HTTPException(500, "Report generated but storing output files failed.")
 
     return result
+
+
+async def _run_report_job(prepared: PreparedReportRequest) -> None:
+    request_id = prepared.request_id
+
+    def progress_callback(step_id: str, status: str, **extra):
+        progress_store.update_step(request_id, step_id, status, **extra)
+
+    try:
+        progress_store.set_status(request_id, "running")
+        progress_store.update_step(request_id, "upload_validation", "done")
+        if not prepared.video_inputs:
+            progress_store.update_step(request_id, "video_extraction", "done", duration_s=0)
+        result = await _execute_report(prepared, progress_callback=progress_callback)
+        progress_store.complete_job(request_id, result)
+    except HTTPException as exc:
+        progress_store.fail_job(request_id, str(exc.detail))
+    except Exception:
+        logger.exception("[%s] Async report job failed", request_id)
+        progress_store.fail_job(request_id, "Internal pipeline error – see server logs.")
+
+
+@router.get("/config")
+async def public_config():
+    """Expose server limits to the UI."""
+    video_limits = get_video_limits()
+    return {
+        "max_cameras": MAX_CAMERAS,
+        "max_image_mb": MAX_IMAGE_MB,
+        "max_total_mb": MAX_TOTAL_MB,
+        "video_default_frames": video_limits.default_frames,
+        "video_max_frames": video_limits.max_frames,
+    }
+
+
+@router.get("/progress/{request_id}")
+async def get_progress(request_id: str):
+    job = progress_store.get_job(request_id)
+    if job is None:
+        raise HTTPException(404, "Progress job not found.")
+    return job.to_dict()
+
+
+@router.post("/progress-report/jobs")
+async def progress_report_job(
+    background_tasks: BackgroundTasks,
+    before_images: list[UploadFile] = File(default=[]),
+    after_images: list[UploadFile] = File(default=[]),
+    camera_labels: str = Form("[]"),
+    videos: list[UploadFile] = File(default=[]),
+    video_labels: str = Form("[]"),
+    video_frame_counts: str = Form("[]"),
+    track_order: str = Form("[]"),
+    bestekpost_filter: str = Form(""),
+    report_fields: str = Form(""),
+    region: str = Form("flemish"),
+    compression_preset: str = Form("medium"),
+    compression_advanced: str = Form(""),
+    jpeg_quality: str = Form(""),
+    target_image_mb: str = Form(""),
+):
+    request_id = generate_request_id()
+
+    if not progress_store.can_start_job():
+        raise HTTPException(
+            409,
+            "Another report job is already running. Please wait until it completes.",
+        )
+
+    try:
+        prepared = await _prepare_report_request(
+            request_id=request_id,
+            before_images=before_images,
+            after_images=after_images,
+            camera_labels=camera_labels,
+            videos=videos,
+            video_labels=video_labels,
+            video_frame_counts=video_frame_counts,
+            track_order=track_order,
+            bestekpost_filter=bestekpost_filter,
+            report_fields=report_fields,
+            region=region,
+            compression_preset=compression_preset,
+            compression_advanced=compression_advanced,
+            jpeg_quality=jpeg_quality,
+            target_image_mb=target_image_mb,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("[%s] Failed to prepare async report job", request_id)
+        raise HTTPException(400, "Invalid report request.")
+
+    progress_store.create_job(request_id, STEP_IDS)
+    progress_store.update_step(request_id, "upload_validation", "done")
+    background_tasks.add_task(_run_report_job, prepared)
+
+    return JSONResponse(
+        status_code=202,
+        content={"request_id": request_id, "status": "pending"},
+    )
+
+
+@router.post("/progress-report")
+async def progress_report(
+    before_images: list[UploadFile] = File(default=[]),
+    after_images: list[UploadFile] = File(default=[]),
+    camera_labels: str = Form("[]"),
+    videos: list[UploadFile] = File(default=[]),
+    video_labels: str = Form("[]"),
+    video_frame_counts: str = Form("[]"),
+    track_order: str = Form("[]"),
+    bestekpost_filter: str = Form(""),
+    report_fields: str = Form(""),
+    region: str = Form("flemish"),
+    compression_preset: str = Form("medium"),
+    compression_advanced: str = Form(""),
+    jpeg_quality: str = Form(""),
+    target_image_mb: str = Form(""),
+):
+    request_id = generate_request_id()
+    prepared = await _prepare_report_request(
+        request_id=request_id,
+        before_images=before_images,
+        after_images=after_images,
+        camera_labels=camera_labels,
+        videos=videos,
+        video_labels=video_labels,
+        video_frame_counts=video_frame_counts,
+        track_order=track_order,
+        bestekpost_filter=bestekpost_filter,
+        report_fields=report_fields,
+        region=region,
+        compression_preset=compression_preset,
+        compression_advanced=compression_advanced,
+        jpeg_quality=jpeg_quality,
+        target_image_mb=target_image_mb,
+    )
+    return await _execute_report(prepared)

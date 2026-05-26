@@ -49,3 +49,58 @@ def test_video_upload_happy_path(monkeypatch, synthetic_video_bytes, fake_agent1
     assert response.status_code == 200
     data = response.json()
     assert data.get("extracted_frames")
+    assert data.get("timings_display")
+
+
+def test_video_upload_custom_frame_count(
+    monkeypatch,
+    synthetic_video_bytes,
+    fake_agent1_output,
+    fake_agent2_output,
+):
+    async def fake_agent1(*args, **kwargs):
+        return fake_agent1_output, [], {}
+
+    async def fake_agent2(*args, **kwargs):
+        return fake_agent2_output, [], {}
+
+    monkeypatch.setattr("app.orchestrator.run_agent1", fake_agent1)
+    monkeypatch.setattr("app.orchestrator.run_agent2", fake_agent2)
+    monkeypatch.setattr("app.orchestrator.RequestLogger.persist", lambda self: None)
+    monkeypatch.setattr("app.api.save_report_output", lambda *args, **kwargs: "outputs/test")
+
+    client = TestClient(app)
+    files = [
+        ("videos", ("clip.mp4", io.BytesIO(synthetic_video_bytes), "video/mp4")),
+    ]
+    response = client.post(
+        "/progress-report",
+        files=files,
+        data={
+            "region": "flemish",
+            "video_labels": '["Cam 1"]',
+            "video_frame_counts": "[4]",
+            "track_order": '["timelapse"]',
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["extracted_frames"][0]["frames"]) == 4
+
+
+def test_video_upload_rejects_invalid_frame_count(synthetic_video_bytes):
+    client = TestClient(app)
+    files = [
+        ("videos", ("clip.mp4", io.BytesIO(synthetic_video_bytes), "video/mp4")),
+    ]
+    response = client.post(
+        "/progress-report",
+        files=files,
+        data={
+            "region": "flemish",
+            "video_labels": '["Cam 1"]',
+            "video_frame_counts": "[99]",
+            "track_order": '["timelapse"]',
+        },
+    )
+    assert response.status_code == 400

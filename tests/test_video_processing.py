@@ -8,6 +8,8 @@ from app.utils import video_processing
 from app.utils.video_processing import (
     compute_sample_timestamps,
     extract_frames,
+    get_video_limits,
+    validate_frame_count,
     validate_video_upload,
     validate_video_metadata,
 )
@@ -83,3 +85,20 @@ def test_extract_frames_from_synthetic_video(synthetic_video_bytes):
 def test_validate_video_metadata_rejects_long_duration():
     with pytest.raises(ValueError, match="duration"):
         validate_video_metadata({"duration_s": 9999, "frame_count": 100})
+
+
+def test_validate_frame_count_within_limits():
+    limits = get_video_limits()
+    assert validate_frame_count(limits.default_frames) == limits.default_frames
+    assert validate_frame_count(limits.max_frames) == limits.max_frames
+
+
+def test_validate_frame_count_rejects_too_low():
+    with pytest.raises(ValueError, match="at least 2"):
+        validate_frame_count(1)
+
+
+def test_validate_frame_count_rejects_too_high():
+    limits = get_video_limits()
+    with pytest.raises(ValueError, match="maximum"):
+        validate_frame_count(limits.max_frames + 1)

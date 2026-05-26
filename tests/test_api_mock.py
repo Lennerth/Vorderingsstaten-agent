@@ -19,7 +19,10 @@ def test_health(client):
 def test_config_endpoint(client):
     response = client.get("/config")
     assert response.status_code == 200
-    assert "max_cameras" in response.json()
+    data = response.json()
+    assert "max_cameras" in data
+    assert data["video_default_frames"] >= 2
+    assert data["video_max_frames"] >= data["video_default_frames"]
 
 
 def test_progress_report_mismatched_counts(client, synthetic_image_bytes):
