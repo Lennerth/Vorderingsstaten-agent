@@ -60,11 +60,17 @@
         .timings-summary { margin-top: 10px; font-size: 0.9em; color: #444; }
         .frame-count-row { margin-top: 8px; }
         .frame-count-row input { width: 80px; }
+        .top-links { margin-top: -8px; margin-bottom: 14px; }
+        .top-links a { color: #007bff; font-weight: 600; text-decoration: none; }
+        .top-links a:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
 
 <h1 data-i18n="pageTitle">Vorderingsstaat Generator</h1>
+<div class="top-links">
+    <a href="/v2" data-i18n="openNewUi">Open nieuwe UI</a>
+</div>
 
 <div class="container">
     <div class="upload-section">
@@ -238,6 +244,7 @@
             processing: 'Bezig met verwerken... dit kan enkele minuten duren.',
             loading: 'Laden...',
             done: 'Klaar!',
+            openNewUi: 'Open nieuwe UI',
             errorPrefix: 'Fout: ',
             genericError: 'Er is een fout opgetreden.',
             frameCountLabel: 'Aantal frames:',
@@ -298,6 +305,7 @@
             processing: 'Traitement en cours... cela peut prendre plusieurs minutes.',
             loading: 'Chargement...',
             done: 'Terminé !',
+            openNewUi: 'Ouvrir la nouvelle UI',
             errorPrefix: 'Erreur : ',
             genericError: "Une erreur s'est produite.",
             frameCountLabel: "Nombre d'images :",

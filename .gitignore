@@ -6,3 +6,6 @@ logs/
 outputs/
 evals/results/
 Data AI toren/*.mp4
+UI-idea/
+frontend/node_modules/
+frontend/dist/

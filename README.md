@@ -133,13 +133,29 @@ must be in place before running this step.
 
 ### 6. Start the web server
 
+Build the v2 frontend once before starting the backend:
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
 ```bash
 python -m app.main
 ```
 
-The API is now available at `http://localhost:8000`. Navigate there in
-your browser to see the built-in uploader, or call the endpoints directly
-as documented below.
+The API and v2 UI are now available at `http://localhost:8000`. Navigate
+there in your browser to use the default React uploader, or call the
+endpoints directly as documented below.
+
+The classic static UI is still available at `http://localhost:8000/classic`.
+To make the classic UI the root page instead, start the server with:
+
+```bash
+python -m app.main --old-frontend
+```
 
 ## Configuration
 
@@ -358,10 +374,14 @@ etc.). Useful for monitoring or for debugging why a request returned a
 
 ### `GET /`
 
-Serves the built-in static uploader (`static/index.html`). This is a
-plain HTML page that lets a user create and remove camera blocks,
-preview the uploaded images, and submit the form to `POST
-/progress-report`.
+Serves the v2 React frontend by default. The build is read from
+`frontend/dist`, so run `npm run build` in `frontend/` before starting
+the backend.
+
+The classic static uploader (`static/index.html`) remains available at
+`GET /classic`. If the server is started with
+`python -m app.main --old-frontend`, `GET /` serves the classic UI
+instead.
 
 ## Project structure
 
