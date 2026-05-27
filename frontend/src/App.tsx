@@ -102,7 +102,10 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [job, setJob] = useState<ProgressJob | null>(null);
   const [data, setData] = useState<ProgressReportResponse | null>(null);
+  /** Language locked to the current or in-flight generated report (not live region). */
+  const [reportLang, setReportLang] = useState<Lang | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const reportDisplayLang = reportLang ?? lang;
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -155,27 +158,31 @@ function App() {
   );
 
   async function runReport() {
+    const runRegion = region;
+    const runLang = suggestedLang(runRegion);
     setError(null);
     setData(null);
     setJob(null);
+    setReportLang(runLang);
     setLoading(true);
     try {
       const started = await startProgressReportJob({
         tracks,
-        region,
+        region: runRegion,
         bestekpostFilter,
         reportFields: selectedFields,
         compression,
       });
-      await pollUntilDone(started.request_id);
+      await pollUntilDone(started.request_id, runLang);
     } catch (err) {
       setError(normalizeError(lang, err));
+      setReportLang(null);
     } finally {
       setLoading(false);
     }
   }
 
-  async function pollUntilDone(requestId: string) {
+  async function pollUntilDone(requestId: string, runLang: Lang) {
     let misses = 0;
     for (;;) {
       await delay(misses ? 1800 : 900);
@@ -185,7 +192,7 @@ function App() {
       } catch (err) {
         misses += 1;
         if (err instanceof ApiError && err.status === 404) {
-          throw new ApiError(t(lang, "errors.job404"), 404);
+          throw new ApiError(t(runLang, "errors.job404"), 404);
         }
         if (misses >= 4) throw err;
         continue;
@@ -193,12 +200,12 @@ function App() {
       misses = 0;
       setJob(next);
       if (next.status === "complete") {
-        if (!next.result) throw new ApiError(t(lang, "errors.noResult"));
+        if (!next.result) throw new ApiError(t(runLang, "errors.noResult"));
         setData(next.result);
         return;
       }
       if (next.status === "error") {
-        throw new ApiError(next.error || t(lang, "errors.pipelineFailed"));
+        throw new ApiError(next.error || t(runLang, "errors.pipelineFailed"));
       }
     }
   }
@@ -291,7 +298,7 @@ function App() {
             <ExtractedFrames lang={lang} frames={data?.extracted_frames ?? []} />
           </section>
 
-          <ReportPanel lang={lang} data={data} loading={loading} job={job} />
+          <ReportPanel lang={reportDisplayLang} data={data} loading={loading} job={job} />
         </div>
       </main>
     </div>

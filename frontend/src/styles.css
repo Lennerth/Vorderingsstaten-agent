@@ -931,7 +931,6 @@ blockquote {
 }
 
 .citation-wrap {
-  position: relative;
   display: inline;
 }
 
@@ -952,10 +951,6 @@ blockquote {
 }
 
 .citation-panel {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 6px);
-  left: 0;
   width: min(320px, 90vw);
   display: grid;
   gap: 8px;
@@ -964,6 +959,13 @@ blockquote {
   border-radius: 12px;
   background: var(--panel);
   box-shadow: var(--shadow);
+}
+
+.citation-panel--portal {
+  position: fixed;
+  z-index: 1000;
+  max-height: min(420px, calc(100vh - 24px));
+  overflow-y: auto;
 }
 
 .citation-note {
